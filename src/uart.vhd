@@ -28,7 +28,8 @@ library IEEE;
 
 entity UART is
   generic (
-    HZ : integer := 30000000
+    CLK_RATE  : integer;
+    BAUD_RATE : integer
   );
   port (
     CLK      : in    std_logic;
@@ -37,8 +38,7 @@ entity UART is
     WE       : in    std_logic;
     RX       : in    std_logic;
     TX       : out   std_logic;
-    TX_EMPTY : out   std_logic;
-    TX_FULL  : out   std_logic;
+    READY    : out   std_logic;
     RX_EMPTY : out   std_logic;
     RX_FULL  : out   std_logic;
     DIN      : in    std_logic_vector(7 downto 0);
@@ -56,15 +56,17 @@ architecture BEHAVIORAL of UART is
   signal tx_rd,  tx_wr     : std_logic;
   signal rx_din, rx_dout   : std_logic_vector(7 downto 0);
   signal tx_din, tx_dout   : std_logic_vector(7 downto 0);
+  signal tx_full : std_logic;
+  signal tx_empty      : std_logic;
 
 begin
 
   rst_n    <= not RST;
-  tx_start <= not TX_EMPTY;
+  tx_start <= not tx_empty;
 
   BAUDGEN_1 : entity work.baudgen
     generic map (
-      BDDIVIDER => bdDiv(HZ)
+      BDDIVIDER => bdDiv(CLK_RATE, BAUD_RATE)
     )
     port map (
       CLK      => CLK,
@@ -89,16 +91,16 @@ begin
       CLK    => CLK,
       RST    => RST,
       RD     => tx_rd,
-      WR     => tx_wr,
+      WR     => WE,
       W_DATA => DIN,
       R_DATA => tx_dout,
-      EMPTY  => TX_EMPTY,
-      FULL   => TX_FULL
+      EMPTY  => tx_empty,
+      FULL   => tx_full
     );
 
   URX : entity work.uart_rx
     generic map (
-      OVERSAMPLING => ovSamp(HZ)
+      OVERSAMPLING => ovSamp(CLK_RATE)
     )
     port map (
       CLK     => CLK,
@@ -112,7 +114,7 @@ begin
 
   UTX : entity work.uart_tx
     generic map (
-      OVERSAMPLING => ovSamp(HZ)
+      OVERSAMPLING => ovSamp(CLK_RATE)
     )
     port map (
       CLK      => CLK,
@@ -124,13 +126,15 @@ begin
       D_IN     => tx_dout
     );
 
+  READY <= '1' when tx_full = '0' and WE = '0' and RST = '0' else
+           '0';
+
   WRITE : process is
   begin
 
     wait until rising_edge(CLK);
 
     if (RST = '1') then
-      ien   <= (others => '0');
       tx_wr <= '0';
     else
       tx_wr <= '0';

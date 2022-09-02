@@ -80,14 +80,14 @@
 # Clock Source - Bank 13
 # 100 MHz
 # ---------------------------------------------------------------------------- 
-set_property PACKAGE_PIN Y9 [get_ports {CLK}];  # "GCLK"
+set_property PACKAGE_PIN Y9 [get_ports {CLK}];  # "CLK"
 
 # ----------------------------------------------------------------------------
 # JA Pmod - Bank 13 
 # ---------------------------------------------------------------------------- 
 set_property PACKAGE_PIN Y11  [get_ports {RTS}];  # "JA1"
-set_property PACKAGE_PIN AA11 [get_ports {RXD}];  # "JA2"
-set_property PACKAGE_PIN Y10  [get_ports {TXD}];  # "JA3"
+set_property PACKAGE_PIN AA11 [get_ports {TXD}];  # "JA2"
+set_property PACKAGE_PIN Y10  [get_ports {RXD}];  # "JA3"
 set_property PACKAGE_PIN AA9  [get_ports {CTS}];  # "JA4"
 #set_property PACKAGE_PIN AB11 [get_ports {JA7}];  # "JA7"
 #set_property PACKAGE_PIN AB10 [get_ports {JA8}];  # "JA8"

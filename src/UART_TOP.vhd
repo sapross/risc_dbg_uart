@@ -26,9 +26,13 @@ library IEEE;
   use IEEE.NUMERIC_STD.ALL;
 
 entity UART_TOP is
+  generic (
+    CLK_RATE       : integer := 100000000;
+    BAUD_RATE      : integer := 115200
+  );
   port (
-    CLK      : in    std_logic;
-    RST      : in    std_logic;
+    CLK       : in    std_logic;
+    RST       : in    std_logic;
     RXD       : in    std_logic;
     TXD       : out   std_logic
   );
@@ -36,52 +40,62 @@ end entity UART_TOP;
 
 architecture BEHAVIORAL of UART_TOP is
 
-  constant HZ : integer := 100000000;
-
-  signal tx_empty, tx_full, rx_empty, rx_full : std_logic;
-  signal re,we : std_logic;
-  signal din,dout : std_logic_vector (7 downto 0);
+  signal rx_empty                         : std_logic;
+  signal rx_full                          : std_logic;
+  signal re,      we                      : std_logic;
+  signal re_next, we_next                 : std_logic;
+  signal din                              : std_logic_vector(7 downto 0);
+  signal din_next                         : std_logic_vector(7 downto 0);
+  signal dout                             : std_logic_vector(7 downto 0);
+  signal ready                            : std_logic;
+  signal counter, counter_next            : integer range 0 to 255;
 
 begin
 
-  UART_1: entity work.UART
+  UART_1 : entity work.uart
     generic map (
-      HZ => HZ)
+      CLK_RATE  => CLK_RATE,
+      BAUD_RATE => BAUD_RATE
+    )
     port map (
       CLK      => CLK,
       RST      => RST,
-      RE       => RE,
-      WE       => WE,
-      RX       => TXD,
-      TX       => RXD,
-      TX_EMPTY => TX_EMPTY,
-      TX_FULL  => TX_FULL,
-      RX_EMPTY => RX_EMPTY,
-      RX_FULL  => RX_FULL,
-      DIN      => DIN,
-      DOUT     => DOUT);
+      RE       => re,
+      WE       => we,
+      RX       => RXD,
+      TX       => TXD,
+      READY    => ready,
+      RX_EMPTY => rx_empty,
+      RX_FULL  => rx_full,
+      DIN      => din,
+      DOUT     => dout
+    );
 
+  re <= '1' when rx_empty ='0' and ready = '1' else
+        '0';
 
+  ECHO : process (CLK) is
+  begin
 
-ECHO: process (CLK) is
-begin
-  if rising_edge(CLK) then
-    if RST = '1' then
-      re <= '0';
-      we <= '0';
-      din <= (others => '0');
-    else
-      re <= '0';
-      we <= '0';
-      din <= (others => '0');
-      if rx_empty = '0' and tx_full = '0' then
-        re <= '1';
-        we <= '1';
-        din <= dout;
+    if rising_edge(CLK) then
+      if (RST = '1') then
+        we      <= '0';
+        din     <= (others => '0');
+        -- counter <= 0;
+      else
+        if re = '1' then
+          we      <= '1';
+          din     <= dout;
+          -- din     <= std_logic_vector(to_unsigned(counter, din'length));
+          -- counter <= counter + 1;
+        else
+          we      <= '0';
+          din     <= (others => '0');
+          -- counter <= counter;
+        end if;
       end if;
     end if;
-  end if;
 
-end process ECHO;
+  end process ECHO;
 
 end architecture BEHAVIORAL;
