@@ -44,18 +44,21 @@ architecture BEHAVIORAL of UART_RX is
 
   type stype is (st_idle, st_start, st_data, st_stop);
 
-  signal state, state_next : stype;
-  signal b_reg             : integer range 0 to OVERSAMPLING - 1;
-  signal b_next            : integer range 0 to OVERSAMPLING - 1;
-  signal c_reg             : integer range 0 to 7;
-  signal c_next            : integer range 0 to 7;
-  signal d_reg             : std_logic_vector( 7 downto 0);
-  signal d_next            : std_logic_vector( 7 downto 0);
+  signal state,         state_next             : stype;
+  signal sample_reg                            : integer range 0 to OVERSAMPLING - 1;
+  signal sample_next                           : integer range 0 to OVERSAMPLING - 1;
 
-  signal valid             : std_logic;
-  signal brk               : std_logic;
+  signal num_ones_reg,  num_zeros_reg          : integer range 0 to OVERSAMPLING - 1;
+  signal num_ones_next, num_zeros_next         : integer range 0 to OVERSAMPLING - 1;
+  signal data_count_reg                        : integer range 0 to 7;
+  signal data_count_next                       : integer range 0 to 7;
+  signal data_reg                              : std_logic_vector( 7 downto 0);
+  signal data_next                             : std_logic_vector( 7 downto 0);
 
-  signal rx_r              : std_logic;
+  signal valid                                 : std_logic;
+  signal brk                                   : std_logic;
+
+  signal rx_r                                  : std_logic;
 
 begin
 
@@ -66,15 +69,19 @@ begin
     wait until rising_edge(CLK);
 
     if (RST = '1') then
-      state <= st_idle;
-      b_reg <= 0;
-      c_reg <= 0;
-      d_reg <= (others => '0');
+      state          <= st_idle;
+      sample_reg     <= 0;
+      data_count_reg <= 0;
+      data_reg       <= (others => '0');
+      num_ones_reg   <= 0;
+      num_zeros_reg  <= 0;
     else
-      state <= state_next;
-      b_reg <= b_next;
-      c_reg <= c_next;
-      d_reg <= d_next;
+      state          <= state_next;
+      sample_reg     <= sample_next;
+      data_count_reg <= data_count_next;
+      data_reg       <= data_next;
+      num_ones_reg   <= num_ones_next;
+      num_zeros_reg  <= num_zeros_next;
     end if;
 
   end process;
@@ -89,16 +96,18 @@ begin
   end process;
 
   -- fsm logic
-  process (state, B_TICK, b_reg, c_reg, d_reg, RX, rx_r) is
+  process (state, B_TICK, sample_reg, data_count_reg, data_reg, num_ones_reg, num_zeros_reg, RX, rx_r) is
   begin
 
     -- defaults
-    state_next <= state;
-    b_next     <= b_reg;
-    c_next     <= c_reg;
-    d_next     <= d_reg;
-    valid      <= '0';
-    brk        <= '0';
+    state_next      <= state;
+    sample_next     <= sample_reg;
+    num_ones_next   <= num_ones_reg;
+    num_zeros_next  <= num_zeros_reg;
+    data_count_next <= data_count_reg;
+    data_next       <= data_reg;
+    valid           <= '0';
+    brk             <= '0';
 
     case state is
 
@@ -106,20 +115,20 @@ begin
         valid <= '0';
         -- wait for falling edge
         if (RX = '0' and rx_r = '1') then
-          state_next <= st_start;
-          b_next     <= 0;
+          state_next  <= st_start;
+          sample_next <= 0;
         end if;
 
       when st_start =>
         valid <= '0';
 
         if (B_TICK = '1') then
-          if (b_reg = OVERSAMPLING / 2 - 1) then
-            state_next <= st_data;
-            b_next     <= 0;
-            c_next     <= 0;
+          if (sample_reg = OVERSAMPLING - 1) then
+            state_next      <= st_data;
+            sample_next     <= 0;
+            data_count_next <= 0;
           else
-            b_next <= b_reg + 1;
+            sample_next <= sample_reg + 1;
           end if;
         end if;
 
@@ -127,16 +136,30 @@ begin
         valid <= '0';
 
         if (B_TICK = '1') then
-          if (b_reg = OVERSAMPLING - 1) then
-            b_next <= 0;
-            d_next <= RX & d_reg(7 downto 1);
-            if (c_reg = 7) then
+          if (sample_reg = OVERSAMPLING - 1) then
+            sample_next <= 0;
+
+            num_ones_next  <= 0;
+            num_zeros_next <= 0;
+
+            if (num_ones_reg > num_zeros_reg) then
+              data_next <= "1" & data_reg(7 downto 1);
+            else
+              data_next <= "0" & data_reg(7 downto 1);
+            end if;
+
+            if (data_count_reg = 7) then
               state_next <= st_stop;
             else
-              c_next <= c_reg + 1;
+              data_count_next <= data_count_reg + 1;
             end if;
           else
-            b_next <= b_reg + 1;
+            sample_next <= sample_reg + 1;
+            if (RX = '1') then
+              num_ones_next <= num_ones_reg + 1;
+            else
+              num_zeros_next <= num_zeros_reg + 1;
+            end if;
           end if;
         end if;
 
@@ -144,7 +167,7 @@ begin
         valid <= '0';
 
         if (B_TICK = '1') then
-          if (b_reg = OVERSAMPLING - 1) then
+          if (sample_reg = OVERSAMPLING - 1) then
             state_next <= st_idle;
             if (RX = '1') then
               valid <= '1';
@@ -152,7 +175,7 @@ begin
               brk <= '1';
             end if;
           else
-            b_next <= b_reg + 1;
+            sample_next <= sample_reg + 1;
           end if;
         end if;
 
@@ -161,7 +184,7 @@ begin
   end process;
 
   -- output
-  DOUT    <= d_reg;
+  DOUT    <= data_reg;
   RX_DONE <= valid;
   RX_BRK  <= brk;
 
