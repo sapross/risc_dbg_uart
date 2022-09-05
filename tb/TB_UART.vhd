@@ -12,6 +12,8 @@
 library IEEE;
   use IEEE.STD_LOGIC_1164.all;
   use IEEE.NUMERIC_STD.all;
+  use IEEE.MATH_REAL.uniform;
+  use IEEE.MATH_REAL.floor;
 
 entity TB_UART is
 end entity TB_UART;
@@ -35,23 +37,36 @@ architecture TB of TB_UART is
     constant word : std_logic_vector(7 downto 0);
     signal txd_i  : out std_logic
   ) is
+    variable seed1, seed2 : positive := 1;
+    variable x : real;
+    variable delay : integer;
+    constant jitter : real := 0.25;
   begin
 
     -- Start bit.
     txd_i <= '0';
-    wait for BAUD_PERIOD;
+    uniform(seed1,seed2,x);
+    delay := integer(floor(x * 333.0 * jitter * 10.0**3 ));
+    wait for delay * ps;
+    wait for BAUD_PERIOD - BAUD_PERIOD*jitter*0.5;
 
     -- Serialize word into txd_i.
     for i in 0 to 7 loop
 
       txd_i <= word(i);
-      wait for BAUD_PERIOD;
+      uniform(seed1,seed2,x);
+      delay := integer(floor(x * 333.0 * jitter * 10.0**3));
+      wait for delay * ps;
+      wait for BAUD_PERIOD - BAUD_PERIOD * jitter * 0.5;
 
     end loop;
 
     -- Stop bit.
     txd_i <= '1';
-    wait for BAUD_PERIOD;
+    uniform(seed1,seed2,x);
+    delay := integer(floor(x * 333.0 * jitter * 10.0**3));
+    wait for delay * ps;
+    wait for BAUD_PERIOD - BAUD_PERIOD * jitter * 0.5;
 
   end procedure uart_transmit;
 
@@ -96,6 +111,9 @@ begin
   end process CLK_PROCESS;
 
   MAIN : process is
+    variable seed1,seed2 : positive := 1;
+    variable x : real;
+    variable delay : integer;
   begin
     wait for 1 ps;
     rst_i <= '1';
@@ -107,10 +125,22 @@ begin
 
     din <= X"FA";
     wait for CLK_PERIOD;
-    uart_transmit(din, rxd);
-    uart_receive(dout, txd);
+    while true loop
+      uniform(seed1,seed2,x);
+      delay := integer(floor(x * 333.0 *10.0**3));
+      wait for delay * ps;
+      uart_transmit(din, rxd);
+    end loop;
     wait;
   end process MAIN;
+
+  RECEIVE : process is
+  begin
+    while true loop
+      uart_receive(dout, txd);
+    end loop;
+    wait;
+  end process RECEIVE;
 
   DUT : entity work.uart_top
     generic map (

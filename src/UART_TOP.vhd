@@ -28,7 +28,7 @@ library IEEE;
 entity UART_TOP is
   generic (
     CLK_RATE       : integer := 100000000;
-    BAUD_RATE      : integer := 115200
+    BAUD_RATE      : integer := 3*10**6
   );
   port (
     CLK       : in    std_logic;
