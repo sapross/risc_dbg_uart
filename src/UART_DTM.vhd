@@ -43,25 +43,24 @@ end entity UART_DTM;
 
 architecture BEHAVIORAL of UART_DTM is
 
-  type state_t is (st_idle, st_read, st_decode, st_instr, st_write, st_send);
+  type state_t is (st_idle, st_decode, st_instr, st_write, st_send);
 
-  signal state,    state_next                                          : state_t;
+  signal state,     state_next                                              : state_t;
 
   -- Counts the number of bits received to that register:
-  signal blkcount, blkcount_next                                       : integer range 0 to DMI_ABITS + 32 + 1;
-  signal re_i,     re_next                                             : std_logic;
-  signal we_i,     we_next                                             : std_logic;
-  signal address,  address_next                                        : std_logic_vector(7 downto 0);
-  signal dread_i,  dread_next                                          : std_logic_vector(6 downto 0);
+  signal blkcount,  blkcount_next                                           : integer range 0 to DMI_ABITS + 32 + 1;
+  signal re_next                                                            : std_logic;
+  signal we_next                                                            : std_logic;
+  signal address,   address_next                                            : std_logic_vector(7 downto 0);
+  signal data_read, data_read_next                                          : std_logic_vector(6 downto 0);
 
-  signal to_send                                                       : std_logic;
-  signal dsend_i,  dsend_next                                          : std_logic_vector(7 downto 0);
+  signal data_send, data_send_next                                          : std_logic_vector(7 downto 0);
 
-  constant BYPASS                                                      : std_logic_vector(7 downto 0) := (others => '0');
-  constant IDCODE                                                      : std_logic_vector(31 downto 0) := X"00000001";
-  signal   dtmcs,  dtmcs_next                                          : std_logic_vector(31 downto 0);
+  constant BYPASS                                                           : std_logic_vector(7 downto 0) := (others => '0');
+  constant IDCODE                                                           : std_logic_vector(31 downto 0) := X"00000001";
+  signal   dtmcs,   dtmcs_next                                              : std_logic_vector(31 downto 0);
   -- Length is abits + 32 data bits + 2 op bits;
-  signal dmi,      dmi_next                                            : std_logic_vector(DMI_ABITS + 32 + 1 downto 0);
+  signal dmi,       dmi_next                                                : std_logic_vector(DMI_ABITS + 32 + 1 downto 0);
 
   procedure send_register (
     -- Register to send.
@@ -81,23 +80,24 @@ architecture BEHAVIORAL of UART_DTM is
   )
       is
   begin
-    if (blkcount < (reg'length/8)) then
-      data_next <= reg(8 * (blkcount_i + 1) - 1 downto 8 * blkcount_i);
+
+    if (blkcount < (reg'length / 8)) then
+      data_next       <= reg(8 * (blkcount_i + 1) - 1 downto 8 * blkcount_i);
       blkcount_next_i <= blkcount_i + 1;
     else
-      if (blkcount = (reg'length/8) and reg'length mod 8 > 0) then
+      if (blkcount = (reg'length / 8) and reg'length mod 8 > 0) then
         -- Handle remainder:
         -- Fill leading bits with zero.
         data_next(7 downto reg'length mod 8) <= (others => '0');
         -- Put remainder of the register in the lower bits.
-        data_next((reg'length mod 8) -1 downto 0) <= reg(  reg'length downto 8 * blkcount_i);
-        blkcount_next_i <= blkcount_i + 1;
+        data_next((reg'length mod 8) - 1 downto 0) <= reg(reg'length -1 downto 8 * blkcount_i);
+        blkcount_next_i                            <= blkcount_i + 1;
       else
         blkcount_next_i <= 0;
         if (rx_empty_i = '1') then
           state_next_i <= st_idle;
         else
-          state_next_i <= st_read;
+          state_next_i <= st_decode;
           re_next_i    <= '1';
         end if;
       end if;
@@ -107,58 +107,62 @@ architecture BEHAVIORAL of UART_DTM is
 
 begin
 
+  DSEND <= data_send;
+
   FSM_CORE : process (CLK) is
   begin
 
     if rising_edge(CLK) then
       if (RST = '1') then
-        state    <= st_idle;
-        blkcount <= 0;
-        re_i     <= '0';
-        we_i     <= '0';
-        dsend_i  <= (others => '0');
-        address  <= (others => '0');
-        dread_i  <= (others => '0');
-        dtmcs    <= (others => '0');
-        dmi      <= (others => '0');
+        state     <= st_idle;
+        blkcount  <= 0;
+        RE        <= '0';
+        WE        <= '0';
+        data_send <= (others => '0');
+        address   <= X"01";
+        data_read <= (others => '0');
+        dtmcs     <= (others => '0');
+        dmi       <= (others => '0');
       else
-        state    <= state_next;
-        blkcount <= blkcount_next;
-        re_i     <= re_next;
-        we_i     <= we_next;
-        dsend_i  <= dsend_next;
-        address  <= address_next;
-        dread_i  <= dread_next;
-        dtmcs    <= dtmcs_next;
-        dmi      <= dmi_next;
+        state     <= state_next;
+        blkcount  <= blkcount_next;
+        RE        <= re_next;
+        WE        <= we_next;
+        data_send <= data_send_next;
+        address   <= address_next;
+        data_read <= data_read_next;
+        dtmcs     <= dtmcs_next;
+        dmi       <= dmi_next;
       end if;
     end if;
 
   end process FSM_CORE;
 
-  FSM : process (state, blkcount, re_i, we_i, dsend_i, address, dread_i, dtmcs, dmi) is
+  FSM : process (state, RX_EMPTY, DREC, data_read, data_send, address, blkcount, dtmcs, dmi) is
   begin
 
     case state is
 
       when st_idle =>
-        re_next <= '0';
-        we_next <= '0';
+        re_next        <= '0';
+        we_next        <= '0';
+        address_next   <= address;
+        data_send_next <= (others => '0');
+        data_read_next <= (others => '0');
+        dtmcs_next     <= dtmcs;
+        dmi_next       <= dmi;
 
         if (RX_EMPTY = '0') then
           re_next    <= '1';
-          state_next <= st_read;
+          state_next <= st_decode;
         end if;
 
-      when st_read =>
+      when st_decode =>
         re_next    <= '0';
         we_next    <= '0';
-        state_next <= st_decode;
+        data_read_next <= DREC(data_read'length - 1 downto 0);
 
-      when st_decode =>
-        dread_next <= DREC(dread_i'length downto 0);
-
-        if (DREC(DREC'length) = '1') then
+        if (DREC(DREC'length - 1) = '1') then
           -- UART-Packet is instruction as instrucion bit is set
           state_next <= st_instr;
         else
@@ -170,7 +174,7 @@ begin
         -- Assume that the address has changed.
         -- Running writing operations are canceled.
         blkcount_next <= 0;
-        address_next  <= dread_i;
+        address_next  <= "0" & data_read;
         state_next    <= st_send;
 
       when st_send =>
@@ -182,7 +186,7 @@ begin
             send_register (
               reg             => IDCODE,
               blkcount_i      => blkcount,
-              data_next       => dsend_next,
+              data_next       => data_send_next,
               blkcount_next_i => blkcount_next,
               rx_empty_i      => RX_EMPTY,
               re_next_i       => re_next,
@@ -192,7 +196,7 @@ begin
             send_register (
               reg             => dtmcs,
               blkcount_i      => blkcount,
-              data_next       => dsend_next,
+              data_next       => data_send_next,
               blkcount_next_i => blkcount_next,
               rx_empty_i      => RX_EMPTY,
               re_next_i       => re_next,
@@ -202,19 +206,19 @@ begin
             send_register (
               reg             => dmi,
               blkcount_i      => blkcount,
-              data_next       => dsend_next,
+              data_next       => data_send_next,
               blkcount_next_i => blkcount_next,
               rx_empty_i      => RX_EMPTY,
               re_next_i       => re_next,
               state_next_i    => state_next);
 
           when others =>
-            dsend_next <= (others => '0');
+            data_send_next <= (others => '0');
 
             if (RX_EMPTY = '1') then
               state_next <= st_idle;
             else
-              state_next <= st_read;
+              state_next <= st_decode;
               re_next    <= '1';
             end if;
 
@@ -222,7 +226,7 @@ begin
 
       when st_write =>
 
-        if (RX_EMPTY = '0') then
+        if (RX_EMPTY = '1') then
           re_next       <= '0';
           blkcount_next <= blkcount;
         else
@@ -233,44 +237,48 @@ begin
         case address is
 
           when X"10" =>
+
             if (blkcount < (dtmcs'length) / 7) then
-              dtmcs_next(7*(blkcount + 1) - 1 downto 7 * blkcount) <= dread_i;
+              dtmcs_next(7*(blkcount + 1) - 1 downto 7 * blkcount) <= data_read;
             else
               if (blkcount = (dtmcs'length) / 7 and dtmcs'length mod 7 > 0) then
-                dtmcs_next(dtmcs'length downto 7*blkcount) <= dread_i(  dtmcs'length mod 7 downto 0);
+                dtmcs_next(dtmcs'length -1 downto 7*blkcount) <= data_read((dtmcs'length mod 7 -1) downto 0);
               else
                 if (RX_EMPTY = '1') then
                   state_next <= st_idle;
                 else
-                  state_next <= st_read;
+                  state_next <= st_decode;
                   re_next    <= '1';
                 end if;
               end if;
             end if;
 
           when X"11" =>
+
             if (blkcount < (dmi'length) / 7) then
-              dmi_next(7*(blkcount + 1) - 1 downto 7 * blkcount) <= dread_i;
+              dmi_next(7*(blkcount + 1) - 1 downto 7 * blkcount) <= data_read;
             else
               if (blkcount = (dmi'length) / 7 and dmi'length mod 7 > 0) then
-                dmi_next(dmi'length downto 7*blkcount) <= dread_i(  dmi'length mod 7 downto 0);
+                dmi_next(dmi'length -1 downto 7*blkcount) <= data_read((dmi'length mod 7)-1 downto 0);
               else
                 if (RX_EMPTY = '1') then
                   state_next <= st_idle;
                 else
-                  state_next <= st_read;
+                  state_next <= st_decode;
                   re_next    <= '1';
                 end if;
               end if;
             end if;
 
           when others =>
+
             if (RX_EMPTY = '1') then
               state_next <= st_idle;
             else
-              state_next <= st_read;
+              state_next <= st_decode;
               re_next    <= '1';
             end if;
+
         end case;
 
     end case;

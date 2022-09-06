@@ -118,41 +118,53 @@ begin
     rxd <= '1';
     wait for CLK_PERIOD;
     rst <= '0';
-    wait for 10*CLK_PERIOD;
+    wait for CLK_PERIOD;
 
     -- Read IDCODE
-    dsend <= X"80" and X"01";
+    dsend <= X"81";
     wait for CLK_PERIOD;
     uart_transmit(dsend, rxd);
 
     -- READ dtmcs
-    dsend <= X"80" and X"10";
+    dsend <= X"90";
     wait for CLK_PERIOD;
     uart_transmit(dsend, rxd);
 
     -- WRITE dtmcs
     for i in 0 to (32 + 6) / 7 loop
-      dsend <= X"FF";
+      dsend <= X"7F";
       wait for CLK_PERIOD;
       uart_transmit(dsend, rxd);
     end loop;
+
+    -- READ dtmcs back
+    dsend <= X"90";
+    wait for CLK_PERIOD;
+    uart_transmit(dsend, rxd);
+
     -- READ dmi
-    dsend <= X"80" and X"11";
+    dsend <= X"91";
     wait for CLK_PERIOD;
     uart_transmit(dsend, rxd);
 
     -- Write dmi
     for i in 0 to (34 + DMI_ABITS + 6) / 7 loop
-      dsend <= X"FF";
+      dsend <= X"7F";
       wait for CLK_PERIOD;
       uart_transmit(dsend, rxd);
     end loop;
 
+    -- READ dmi back
+    dsend <= X"91";
+    wait for CLK_PERIOD;
+    uart_transmit(dsend, rxd);
     wait;
+
   end process MAIN;
 
   RECEIVE : process is
   begin
+    wait for 3*CLK_PERIOD;
     while true loop
       uart_receive(drec, txd);
     end loop;
