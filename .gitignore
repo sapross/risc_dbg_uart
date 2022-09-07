@@ -1,0 +1,5 @@
+/VivadoProject/
+/UART-DTM.srcs/
+/.hdl_checker.config
+/hdl-prj.json
+/update_hdl_prj.sh
