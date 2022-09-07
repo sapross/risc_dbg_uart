@@ -4,7 +4,7 @@
 --
 -- Create Date:    09:32:01'05.09.2022
 -- Design Name:
--- Module Name:    UART_TAP - Behavioral
+-- Module Name:    dmi_uart_tap - Behavioral
 -- Project Name:
 -- Target Devices:
 -- Tool versions:
@@ -22,7 +22,7 @@ library IEEE;
   use IEEE.STD_LOGIC_1164.ALL;
   use IEEE.NUMERIC_STD.ALL;
 
-entity UART_TAP is
+entity dmi_uart_tap is
   generic (
     CLK_RATE       : integer := 100000000;
     BAUD_RATE      : integer := 3 * 10 ** 6;
@@ -47,9 +47,9 @@ entity UART_TAP is
     -- test data in from submodule
     DMI_TDO_I      : in    std_logic
   );
-end entity UART_TAP;
+end entity dmi_uart_tap;
 
-architecture BEHAVIORAL of UART_TAP is
+architecture BEHAVIORAL of dmi_uart_tap is
 
   -- UART signals
   signal re,        re_next                                                            : std_logic;
