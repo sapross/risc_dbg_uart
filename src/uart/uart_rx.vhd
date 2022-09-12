@@ -44,70 +44,68 @@ architecture BEHAVIORAL of UART_RX is
 
   type stype is (st_idle, st_start, st_data, st_stop);
 
-  signal state,         state_next             : stype;
-  signal sample_reg                            : integer range 0 to OVERSAMPLING - 1;
-  signal sample_next                           : integer range 0 to OVERSAMPLING - 1;
+  signal state, state_n                               : stype;
 
-  signal num_ones_reg,  num_zeros_reg          : integer range 0 to OVERSAMPLING - 1;
-  signal num_ones_next, num_zeros_next         : integer range 0 to OVERSAMPLING - 1;
-  signal data_count_reg                        : integer range 0 to 7;
-  signal data_count_next                       : integer range 0 to 7;
-  signal data_reg                              : std_logic_vector( 7 downto 0);
-  signal data_next                             : std_logic_vector( 7 downto 0);
+  constant CORRECTION_DELAY                           : integer := OVERSAMPLING / 8;
+  signal   i                                          : integer range 0 to OVERSAMPLING - 1;
+  signal   i_n                                        : integer range 0 to OVERSAMPLING - 1;
 
-  signal valid                                 : std_logic;
-  signal brk                                   : std_logic;
+  -- signal rx_reg, rx_reg_n                           : std_logic_vector( 2 downto  0);
+  signal nbits                                        : integer range 0 to 7;
+  signal nbits_n                                      : integer range 0 to 7;
+  signal data                                         : std_logic_vector( 7 downto 0);
+  signal data_n                                       : std_logic_vector( 7 downto 0);
 
-  signal rx_r                                  : std_logic;
+  signal valid                                        : std_logic;
+  signal brk                                          : std_logic;
+
+  signal rx_r                                         : std_logic;
 
 begin
 
   -- fsm core
-  process is
+  FSM_CORE : process is
   begin
 
     wait until rising_edge(CLK);
 
     if (RST = '1') then
-      state          <= st_idle;
-      sample_reg     <= 0;
-      data_count_reg <= 0;
-      data_reg       <= (others => '0');
-      num_ones_reg   <= 0;
-      num_zeros_reg  <= 0;
+      state  <= st_idle;
+      i      <= 0;
+      nbits  <= 0;
+      data   <= (others => '0');
+      -- rx_reg <= (others => '0');
     else
-      state          <= state_next;
-      sample_reg     <= sample_next;
-      data_count_reg <= data_count_next;
-      data_reg       <= data_next;
-      num_ones_reg   <= num_ones_next;
-      num_zeros_reg  <= num_zeros_next;
+      state  <= state_n;
+      i      <= i_n;
+      nbits  <= nbits_n;
+      data   <= data_n;
+      -- rx_reg <= rx_reg_n;
     end if;
 
-  end process;
+  end process FSM_CORE;
 
   -- rx delay
-  process is
+  RX_DELAY : process is
   begin
 
     wait until rising_edge(CLK);
     rx_r <= RX;
 
-  end process;
+  end process RX_DELAY;
 
   -- fsm logic
-  process (state, B_TICK, sample_reg, data_count_reg, data_reg, num_ones_reg, num_zeros_reg, RX, rx_r) is
+  FSM_LOGIC : process (state, B_TICK, i, nbits, data, RX, rx_r) is
   begin
 
     -- defaults
-    state_next      <= state;
-    sample_next     <= sample_reg;
-    num_ones_next   <= num_ones_reg;
-    num_zeros_next  <= num_zeros_reg;
-    data_count_next <= data_count_reg;
-    data_next       <= data_reg;
-    valid           <= '0';
-    brk             <= '0';
+    state_n <= state;
+    i_n     <= i;
+    -- rx_reg_n <= rx_reg;
+    nbits_n <= nbits;
+    data_n  <= data;
+    valid   <= '0';
+    brk     <= '0';
 
     case state is
 
@@ -115,20 +113,20 @@ begin
         valid <= '0';
         -- wait for falling edge
         if (RX = '0' and rx_r = '1') then
-          state_next  <= st_start;
-          sample_next <= 0;
+          state_n <= st_start;
+          i_n     <= 0;
         end if;
 
       when st_start =>
         valid <= '0';
 
         if (B_TICK = '1') then
-          if (sample_reg = OVERSAMPLING - 1) then
-            state_next      <= st_data;
-            sample_next     <= 0;
-            data_count_next <= 0;
+          if (i = OVERSAMPLING / 2 - 1) then
+            state_n <= st_data;
+            i_n     <= 0;
+            nbits_n <= 0;
           else
-            sample_next <= sample_reg + 1;
+            i_n <= i + 1;
           end if;
         end if;
 
@@ -136,30 +134,16 @@ begin
         valid <= '0';
 
         if (B_TICK = '1') then
-          if (sample_reg = OVERSAMPLING - 1) then
-            sample_next <= 0;
-
-            num_ones_next  <= 0;
-            num_zeros_next <= 0;
-
-            if (num_ones_reg > num_zeros_reg) then
-              data_next <= "1" & data_reg(7 downto 1);
+          if (i = OVERSAMPLING - 1) then
+            i_n           <= 0;
+            data_n(nbits) <= RX;
+            if (nbits = 7) then
+              state_n <= st_stop;
             else
-              data_next <= "0" & data_reg(7 downto 1);
-            end if;
-
-            if (data_count_reg = 7) then
-              state_next <= st_stop;
-            else
-              data_count_next <= data_count_reg + 1;
+              nbits_n <= nbits + 1;
             end if;
           else
-            sample_next <= sample_reg + 1;
-            if (RX = '1') then
-              num_ones_next <= num_ones_reg + 1;
-            else
-              num_zeros_next <= num_zeros_reg + 1;
-            end if;
+            i_n <= i + 1;
           end if;
         end if;
 
@@ -167,24 +151,24 @@ begin
         valid <= '0';
 
         if (B_TICK = '1') then
-          if (sample_reg = OVERSAMPLING - 1) then
-            state_next <= st_idle;
+          if (i = OVERSAMPLING - 1) then
+            state_n <= st_idle;
             if (RX = '1') then
               valid <= '1';
             else
               brk <= '1';
             end if;
           else
-            sample_next <= sample_reg + 1;
+            i_n <= i + 1;
           end if;
         end if;
 
     end case;
 
-  end process;
+  end process FSM_LOGIC;
 
   -- output
-  DOUT    <= data_reg;
+  DOUT    <= data;
   RX_DONE <= valid;
   RX_BRK  <= brk;
 
