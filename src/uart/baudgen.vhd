@@ -1,8 +1,9 @@
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
+
 library IEEE;
-use IEEE.STD_LOGIC_1164.ALL;
-use IEEE.NUMERIC_STD.ALL;
+  use IEEE.STD_LOGIC_1164.ALL;
+  use IEEE.NUMERIC_STD.ALL;
 
 --! @brief Baud rate generator entity
 --! @details
@@ -15,40 +16,44 @@ use IEEE.NUMERIC_STD.ALL;
 --! @param[in] rst reset
 --! @param[out] baudtick Enable pulse, active for 1 cycle every bdDivider cycles
 
-entity baudgen is
-    generic (
-		--! Frequency divider
-		bdDivider: integer := 27
-	 );
-    PORT(
-		--! Clock
-         clk : IN  std_logic;
-		--! Reset
-         rst : IN  std_logic;
-		--! Enable pulse, active for 1 cycle every bdDivider cycles
-         baudtick : OUT  std_logic
-        );
-end baudgen;
+entity BAUDGEN is
+  generic (
+    --! Frequency divider
+    BDDIVIDER : integer := 27
+  );
+  port (
+    --! Clock
+    CLK      : in    std_logic;
+    --! Reset
+    RST      : in    std_logic;
+    --! Enable pulse, active for 1 cycle every bdDivider cycles
+    BAUDTICK : out   std_logic
+  );
+end entity BAUDGEN;
 
-architecture Behavioral of baudgen is
+architecture BEHAVIORAL of BAUDGEN is
 
 begin
 
-	--! Counter with synchronous reset. Restart at bdTick limit
-    bdCounter: process
-        variable cnt: integer;
-    begin
-        wait until rising_edge(clk);
-        baudtick <= '0';
-        if rst = '1' then
-            cnt := 0;
-        elsif cnt < bdDivider - 1 then
-            cnt := cnt + 1;
-        else
-            cnt := 0;
-            baudtick <= '1';
-        end if;
-    end process;
+  --! Counter with synchronous reset. Restart at bdTick limit
+  BDCOUNTER : process is
 
+    variable cnt : integer;
 
-end Behavioral;
+  begin
+
+    wait until rising_edge(CLK);
+    BAUDTICK <= '0';
+
+    if (RST = '1') then
+      cnt := 0;
+    elsif (cnt < BDDIVIDER - 1) then
+      cnt := cnt + 1;
+    else
+      cnt      := 0;
+      BAUDTICK <= '1';
+    end if;
+
+  end process BDCOUNTER;
+
+end architecture BEHAVIORAL;

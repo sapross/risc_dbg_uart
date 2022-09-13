@@ -70,16 +70,16 @@ begin
     wait until rising_edge(CLK);
 
     if (RST = '1') then
-      state  <= st_idle;
-      i      <= 0;
-      nbits  <= 0;
-      data   <= (others => '0');
-      -- rx_reg <= (others => '0');
+      state <= st_idle;
+      i     <= 0;
+      nbits <= 0;
+      data  <= (others => '0');
+    -- rx_reg <= (others => '0');
     else
-      state  <= state_n;
-      i      <= i_n;
-      nbits  <= nbits_n;
-      data   <= data_n;
+      state <= state_n;
+      i     <= i_n;
+      nbits <= nbits_n;
+      data  <= data_n;
       -- rx_reg <= rx_reg_n;
     end if;
 

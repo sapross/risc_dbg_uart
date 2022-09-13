@@ -40,7 +40,7 @@ architecture BEHAVIORAL of UART_DTM_TOP is
 
   signal rx_empty                            : std_logic;
   signal rx_full                             : std_logic;
-  signal re,      we                         : std_logic;
+  signal re, we                              : std_logic;
   signal din                                 : std_logic_vector(7 downto 0);
   signal dout                                : std_logic_vector(7 downto 0);
   signal tx_ready                            : std_logic;
@@ -66,15 +66,15 @@ begin
       DOUT     => dout
     );
 
-  uart_dtm_1 : entity work.uart_dtm
+  UART_DTM_1 : entity work.uart_dtm
     generic map (
       CLK_RATE  => CLK_RATE,
       BAUD_RATE => BAUD_RATE,
       DMI_ABITS => DMI_ABITS
     )
     port map (
-      CLK      => clk,
-      RST      => rst,
+      CLK      => CLK,
+      RST      => RST,
       RE       => re,
       WE       => we,
       TX_READY => tx_ready,
@@ -83,6 +83,5 @@ begin
       DREC     => dout,
       DSEND    => din
     );
-
 
 end architecture BEHAVIORAL;

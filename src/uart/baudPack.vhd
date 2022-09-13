@@ -38,9 +38,7 @@ package body baudpack is
 
   function ovsamp (hz: integer) return integer is
 
-
   begin
-
 
     -- if (hz*1000000 >= 50) then
     --   report "Oversampling 16";
@@ -73,6 +71,7 @@ package body baudpack is
     --   return 1;
     -- end if;
     return 16;
+
   end function;
 
 end package body baudpack;
