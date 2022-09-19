@@ -32,15 +32,13 @@ entity DMI_UART_TAP is
     CLK      : in  std_logic;
     RST      : in  std_logic;
     -- UART-Interface connections
-    RX       : in  std_logic;
-    TX       : out std_logic;
-    RE       : out std_logic;
-    WE       : out std_logic;
-    TX_READY : in  std_logic;
-    RX_EMPTY : in  std_logic;
-    RX_FULL  : in  std_logic;
-    DIN      : out std_logic_vector(7 downto 0);
-    DOUT     : in  std_logic_vector(7 downto 0);
+    RE_O       : out std_logic;
+    WE_O       : out std_logic;
+    TX_READY_I : in  std_logic;
+    RX_EMPTY_I : in  std_logic;
+    RX_FULL_I  : in  std_logic;
+    DIN_O      : out std_logic_vector(7 downto 0);
+    DOUT_I     : in  std_logic_vector(7 downto 0);
 
     -- JTAG is interested in writing the DTM CSR register
     DTMCS_SELECT_O : out std_logic;
@@ -96,7 +94,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     st_length,
     st_wait_read_dmi,
     st_read,
-    st_wait_write_dmi,
+DMI_UART_TAP_1    st_wait_write_dmi,
     st_write,
     st_rw,
     st_reset
@@ -203,14 +201,14 @@ begin
   DMI_WRITE_VALID_O <= dmi_write_valid;
   DMI_WRITE_O       <= dmi_write;
   DMI_READ_READY_O  <= dmi_read_ready;
-  data_read <= DOUT;
-  DIN <= data_send;
+  data_read <= DOUT_I;
+  DIN_O <= data_send;
 
 
   MSG_TIMEOUT : process(CLK) is
   begin
     if rising_edge(CLK) then
-      if (RST = '1' or run_timer = '0' or rx_empty = '0') then
+      if (RST = '1' or run_timer = '0' or rx_empty_I = '0') then
         msg_timer <= 0;
       else
         if msg_timer < MSG_TIMEOUT and run_timer = '1' then
@@ -225,8 +223,8 @@ begin
 
     if rising_edge(CLK) then
       if (RST = '1') then
-        re              <= '0';
-        we              <= '0';
+        re_O              <= '0';
+        we_O              <= '0';
         data_send       <= (others                 => '0');
         data_read       <= (others                 => '0');
         dmi_write_valid <= '0';
@@ -240,8 +238,8 @@ begin
         dtmcs           <= (others                 => '0');
         state           <= st_idle;
       else
-        re              <= re_next;
-        we              <= we_next;
+        re_O              <= re_next;
+        we_O              <= we_next;
         data_send       <= data_send_next;
         data_read       <= data_read_next;
         dmi_write_valid <= dmi_write_valid_next;
@@ -260,7 +258,7 @@ begin
 
   end process FSM_CORE;
 
-  FSM : process (state, rx_empty, data_read, data_read, data_send, address, byte_count, dtmcs, dmi) is
+  FSM : process (state, rx_empty_I, data_read, data_read, data_send, address, byte_count, dtmcs, dmi) is
   begin
 
     case state is
@@ -275,7 +273,7 @@ begin
         DMI_RESET_O    <= '0';
 
         run_timer <= '0';
-        if (rx_empty = '0') then
+        if (rx_empty_I = '0') then
           re_next    <= '1';
           state_next <= st_header;
         end if;
@@ -284,13 +282,13 @@ begin
         we_next    <= '0';
         state_next <= st_header;
 
-        if (rx_empty = '0') then
+        if (rx_empty_I = '0') then
           re_next <= '1';
         else
           re_next <= '0';
         end if;
 
-        if (re = '1' and data_read = HEADER) then
+        if (re_O = '1' and data_read = HEADER) then
           state_next <= st_cmdaddr;
         end if;
 
@@ -298,13 +296,13 @@ begin
         run_timer  <= '1';
         state_next <= st_cmdaddr;
 
-        if (rx_empty = '0') then
+        if (rx_empty_I = '0') then
           re_next <= '1';
         else
           re_next <= '0';
         end if;
 
-        if (re = '1') then
+        if (re_O = '1') then
           cmd_next     <= data_read(7 downto IrLength);
           address_next <= data_read(IrLength - 1 downto 0);
           state_next   <= st_length;
@@ -321,13 +319,13 @@ begin
         state_next <= st_length;
         run_timer  <= '1';
 
-        if (rx_empty = '0') then
+        if (rx_empty_I = '0') then
           re_next <= '1';
         else
           re_next <= '0';
         end if;
 
-        if (re = '1') then
+        if (re_O = '1') then
           data_length_next <= data_read;
           byte_count_next  <= 0;
 
@@ -390,9 +388,9 @@ begin
 
       when st_read =>
         state_next <= st_read;
-        we_next    <= tx_ready;
+        we_next    <= tx_ready_I;
         run_timer  <= '1';
-        if (tx_ready = '1') then
+        if (tx_ready_I = '1') then
           byte_count_next <= byte_count + 1;
         else
           byte_count_next <= byte_count;
@@ -442,7 +440,7 @@ begin
       when st_write =>
         state_next <= st_write;
         run_timer  <= '1';
-        if (rx_empty = '1') then
+        if (rx_empty_I = '1') then
           re_next         <= '0';
           byte_count_next <= byte_count;
         else
@@ -496,7 +494,7 @@ begin
         state_next <= st_rw;
         run_timer  <= '1';
 
-        if (tx_ready = '1' and rx_empty = '0') then
+        if (tx_ready_I = '1' and rx_empty_I = '0') then
           we_next         <= '1';
           re_next         <= '1';
           byte_count_next <= byte_count + 1;
@@ -566,8 +564,8 @@ begin
       when st_reset =>
         state       <= st_idle;
         byte_count  <= 0;
-        re          <= '0';
-        we          <= '0';
+        re_O          <= '0';
+        we_O          <= '0';
         data_send   <= (others => '0');
         address     <= X"01";
         data_read   <= (others => '0');
