@@ -21,7 +21,9 @@
 library IEEE;
   use IEEE.STD_LOGIC_1164.all;
   use IEEE.NUMERIC_STD.all;
-  use work.uart_pkg.all;
+  
+library WORK;
+  use WORK.uart_pkg.all;
 
 entity DMI_UART_TAP is
   generic (
@@ -71,7 +73,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   signal dmi_read_ready,  dmi_read_ready_next            : std_logic;
   signal dmi,             dmi_next                       : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
   -- Counts the number of bytes send by/written to that register:
-  signal byte_count,      byte_count_next                : integer range 0 to RMI_REQ_LENGTH + 1;
+  signal byte_count,      byte_count_next                : integer range 0 to DMI_REQ_LENGTH + 1;
   signal data_length,     data_length_next               : integer range 0 to 255;
   signal address,         address_next                   : std_logic_vector(7 downto 0);
   signal cmd,             cmd_next                       : std_logic_vector(2 downto 0);
@@ -94,7 +96,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     st_length,
     st_wait_read_dmi,
     st_read,
-    DMI_UART_TAP_1 st_wait_write_dmi,
+    st_wait_write_dmi,
     st_write,
     st_rw,
     st_reset
@@ -187,7 +189,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   is
   begin
 
-    dmi_req_next <= stl_to_dmi_req(dmi_req);
+    dmi_req_next <= stl_to_dmi_req(dmi_i);
     valid_next   <= '1';
 
     if (ready = '1') then
@@ -201,10 +203,10 @@ begin
   DMI_WRITE_VALID_O <= dmi_write_valid;
   DMI_WRITE_O       <= dmi_write;
   DMI_READ_READY_O  <= dmi_read_ready;
-  data_read         <= DOUT_I;
-  DIN_O             <= data_send;
+  data_read         <= DREC_I;
+  DSEND_O             <= data_send;
 
-  MSG_TIMEOUT : process (CLK) is
+  TIMEOUT : process (CLK) is
   begin
 
     if rising_edge(CLK) then
@@ -217,7 +219,7 @@ begin
       end if;
     end if;
 
-  end process MSG_TIMEOUT;
+  end process TIMEOUT;
 
   FSM_CORE : process (CLK) is
   begin
@@ -227,9 +229,8 @@ begin
         RE_O            <= '0';
         WE_O            <= '0';
         data_send       <= (others                 => '0');
-        data_read       <= (others                 => '0');
         dmi_write_valid <= '0';
-        dmi_write       <= dmi_resp_to_stl((others => '0'));
+        dmi_write       <= (addr => (others =>'0'), data => (others=>'0'), op => (others =>'0'));
         dmi_read_ready  <= '0';
         dmi             <= (others                 => '0');
         byte_count      <= 0;
@@ -242,7 +243,6 @@ begin
         RE_O            <= re_next;
         WE_O            <= we_next;
         data_send       <= data_send_next;
-        data_read       <= data_read_next;
         dmi_write_valid <= dmi_write_valid_next;
         dmi_write       <= dmi_write_next;
         dmi_read_ready  <= dmi_read_ready_next;
@@ -328,7 +328,7 @@ begin
         end if;
 
         if (RE_O = '1') then
-          data_length_next <= data_read;
+          data_length_next <= integer(unsigned(data_read));
           byte_count_next  <= 0;
 
           case cmd is
