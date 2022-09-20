@@ -20,59 +20,61 @@ end entity TB_UART;
 
 architecture TB of TB_UART is
 
-  constant BAUD_RATE       : integer := 3 * 10 ** 6;   -- Hz
-  constant BAUD_PERIOD     : time := 333 ns;           -- ns;
-  constant CLK_RATE        : integer := 100 * 10 ** 6; -- Hz
-  constant CLK_PERIOD      : time := 10 ns;            -- ns;
+  constant BAUD_RATE   : integer := 3 * 10 ** 6;    -- Hz
+  constant BAUD_PERIOD : time    := 333 ns;         -- ns;
+  constant CLK_RATE    : integer := 100 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD  : time    := 10 ns;          -- ns;
 
-  signal clk               : std_logic;
-  signal   rst_i           : std_logic;
+  signal clk           : std_logic;
+  signal rst_i         : std_logic;
 
-  signal rxd               : std_logic;
-  signal txd               : std_logic;
+  signal rxd           : std_logic;
+  signal txd           : std_logic;
 
-  signal din, dout         : std_logic_vector(7 downto 0);
+  signal din, dout     : std_logic_vector(7 downto 0);
 
   procedure uart_transmit (
-    constant word : std_logic_vector(7 downto 0);
+    constant word :     std_logic_vector(7 downto 0);
     signal txd_i  : out std_logic
   ) is
+
     variable seed1, seed2 : positive := 1;
-    variable x : real;
-    variable delay : integer;
-    constant jitter : real := 0.25;
+    variable x            : real;
+    variable delay        : integer;
+    constant JITTER       : real     := 0.25;
+
   begin
 
     -- Start bit.
     txd_i <= '0';
-    uniform(seed1,seed2,x);
-    delay := integer(floor(x * 333.0 * jitter * 10.0**3 ));
+    uniform(seed1, seed2, x);
+    delay := integer(floor(x * 333.0 * JITTER * 10.0 ** 3));
     wait for delay * ps;
-    wait for BAUD_PERIOD - BAUD_PERIOD*jitter*0.5;
+    wait for BAUD_PERIOD - BAUD_PERIOD * JITTER * 0.5;
 
     -- Serialize word into txd_i.
     for i in 0 to 7 loop
 
       txd_i <= word(i);
-      uniform(seed1,seed2,x);
-      delay := integer(floor(x * 333.0 * jitter * 10.0**3));
+      uniform(seed1, seed2, x);
+      delay := integer(floor(x * 333.0 * JITTER * 10.0 ** 3));
       wait for delay * ps;
-      wait for BAUD_PERIOD - BAUD_PERIOD * jitter * 0.5;
+      wait for BAUD_PERIOD - BAUD_PERIOD * JITTER * 0.5;
 
     end loop;
 
     -- Stop bit.
     txd_i <= '1';
-    uniform(seed1,seed2,x);
-    delay := integer(floor(x * 333.0 * jitter * 10.0**3));
+    uniform(seed1, seed2, x);
+    delay := integer(floor(x * 333.0 * JITTER * 10.0 ** 3));
     wait for delay * ps;
-    wait for BAUD_PERIOD - BAUD_PERIOD * jitter * 0.5;
+    wait for BAUD_PERIOD - BAUD_PERIOD * JITTER * 0.5;
 
   end procedure uart_transmit;
 
   procedure uart_receive (
     signal word  : out std_logic_vector(7 downto 0);
-    signal rxd_i : in std_logic
+    signal rxd_i : in  std_logic
   ) is
   begin
 
@@ -111,35 +113,47 @@ begin
   end process CLK_PROCESS;
 
   MAIN : process is
-    variable seed1,seed2 : positive := 1;
-    variable x : real;
-    variable delay : integer;
+
+    variable seed1, seed2 : positive := 1;
+    variable x            : real;
+    variable delay        : integer;
+
   begin
+
     wait for 1 ps;
     rst_i <= '1';
-    rxd <= '1';
+    rxd   <= '1';
     wait for CLK_PERIOD;
     rst_i <= '0';
-    wait for 10*CLK_PERIOD;
+    wait for 10 * CLK_PERIOD;
 
-
-    din <= X"FA";
+    din <= x"FA";
     wait for CLK_PERIOD;
+
     while true loop
-      uniform(seed1,seed2,x);
-      delay := integer(floor(x * 333.0 *10.0**3));
+
+      uniform(seed1, seed2, x);
+      delay := integer(floor(x * 333.0 * 10.0 ** 3));
       wait for delay * ps;
       uart_transmit(din, rxd);
+
     end loop;
+
     wait;
+
   end process MAIN;
 
   RECEIVE : process is
   begin
+
     while true loop
+
       uart_receive(dout, txd);
+
     end loop;
+
     wait;
+
   end process RECEIVE;
 
   DUT : entity work.uart_top
