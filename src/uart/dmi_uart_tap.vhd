@@ -21,7 +21,7 @@
 library IEEE;
   use IEEE.STD_LOGIC_1164.all;
   use IEEE.NUMERIC_STD.all;
-  
+
 library WORK;
   use WORK.uart_pkg.all;
 
@@ -62,32 +62,32 @@ end entity DMI_UART_TAP;
 architecture BEHAVIORAL of DMI_UART_TAP is
 
   -- UART signals
-  signal re_next                                         : std_logic;
-  signal we_next                                         : std_logic;
-  signal data_read                                       : std_logic_vector(7 downto 0);
-  signal data_send,       data_send_next                 : std_logic_vector(7 downto 0);
+  signal re,              re_next                                         : std_logic;
+  signal we,              we_next                                         : std_logic;
+  signal data_read                                                        : std_logic_vector(7 downto 0);
+  signal data_send,       data_send_next                                  : std_logic_vector(7 downto 0);
 
-  signal dmi_write_valid, dmi_write_valid_next           : std_logic;
-  signal dmi_write,       dmi_write_next                 : dmi_req_t;
+  signal dmi_write_valid, dmi_write_valid_next                            : std_logic;
+  signal dmi_write,       dmi_write_next                                  : dmi_req_t;
 
-  signal dmi_read_ready,  dmi_read_ready_next            : std_logic;
-  signal dmi,             dmi_next                       : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal dmi_read_ready,  dmi_read_ready_next                             : std_logic;
+  signal dmi,             dmi_next                                        : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
   -- Counts the number of bytes send by/written to that register:
-  signal byte_count,      byte_count_next                : integer range 0 to DMI_REQ_LENGTH + 1;
-  signal data_length,     data_length_next               : integer range 0 to 255;
-  signal address,         address_next                   : std_logic_vector(7 downto 0);
-  signal cmd,             cmd_next                       : std_logic_vector(2 downto 0);
+  signal byte_count,      byte_count_next                                 : integer range 0 to DMI_REQ_LENGTH + 1;
+  signal data_length,     data_length_next                                : integer range 0 to 255;
+  signal address,         address_next                                    : std_logic_vector(7 downto 0);
+  signal cmd,             cmd_next                                        : std_logic_vector(2 downto 0);
 
-  constant BYPASS                                        : std_logic_vector(7 downto 0)  := (others => '0');
-  constant IDCODE                                        : std_logic_vector(31 downto 0) := X"00000001";
-  signal   dtmcs,         dtmcs_next                     : std_logic_vector(31 downto 0);
+  constant BYPASS                                                         : std_logic_vector(7 downto 0)  := (others => '0');
+  constant IDCODE                                                         : std_logic_vector(31 downto 0) := X"00000001";
+  signal   dtmcs,         dtmcs_next                                      : std_logic_vector(31 downto 0);
 
   -- Time Out timer to catch unfished operations.
   -- Each UART-Frame takes 10 baud periods (1 Start + 8 Data + 1 Stop)
   -- Wait for the time of 5 UART-Frames.
-  constant MSG_TIMEOUT                                   : integer := 5 * (10 * CLK_RATE / BAUD_RATE);
-  signal   msg_timer                                     : integer range 0 to MSG_TIMEOUT;
-  signal   run_timer                                     : std_logic;
+  constant MSG_TIMEOUT                                                    : integer := 5 * (10 * CLK_RATE / BAUD_RATE);
+  signal   msg_timer                                                      : integer range 0 to MSG_TIMEOUT;
+  signal   run_timer                                                      : std_logic;
 
   type state_t is (
     st_idle,
@@ -102,7 +102,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     st_reset
   );
 
-  signal state,           state_next                     : state_t;
+  signal state,           state_next                                      : state_t;
 
   procedure read_register (
     -- Register to send.
@@ -128,7 +128,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
       -- Put remainder of the register in the lower bits.
       data_next((value'length mod 8) - 1 downto 0) <= value(value'length - 1 downto 8 * byte_count_i);
     else
-      we_next      <= '0';
+      we_next_i    <= '0';
       state_next_i <= st_idle;
     end if;
 
@@ -204,7 +204,9 @@ begin
   DMI_WRITE_O       <= dmi_write;
   DMI_READ_READY_O  <= dmi_read_ready;
   data_read         <= DREC_I;
-  DSEND_O             <= data_send;
+  DSEND_O           <= data_send;
+  RE_O              <= re;
+  WE_O              <= we;
 
   TIMEOUT : process (CLK) is
   begin
@@ -226,8 +228,8 @@ begin
 
     if rising_edge(CLK) then
       if (RST = '1') then
-        RE_O            <= '0';
-        WE_O            <= '0';
+        re              <= '0';
+        we              <= '0';
         data_send       <= (others                 => '0');
         dmi_write_valid <= '0';
         dmi_write       <= (addr => (others =>'0'), data => (others=>'0'), op => (others =>'0'));
@@ -240,8 +242,8 @@ begin
         dtmcs           <= (others                 => '0');
         state           <= st_idle;
       else
-        RE_O            <= re_next;
-        WE_O            <= we_next;
+        re              <= re_next;
+        we              <= we_next;
         data_send       <= data_send_next;
         dmi_write_valid <= dmi_write_valid_next;
         dmi_write       <= dmi_write_next;
@@ -290,7 +292,7 @@ begin
           re_next <= '0';
         end if;
 
-        if (RE_O = '1' and data_read = HEADER) then
+        if (re = '1' and data_read = HEADER) then
           state_next <= st_cmdaddr;
         end if;
 
@@ -304,10 +306,11 @@ begin
           re_next <= '0';
         end if;
 
-        if (RE_O = '1') then
-          cmd_next     <= data_read(7 downto IrLength);
-          address_next <= data_read(IrLength - 1 downto 0);
-          state_next   <= st_length;
+        if (re = '1') then
+          cmd_next                            <= data_read(7 downto IrLength);
+          address_next(7 downto IrLength)     <= (others => '0');
+          address_next(IrLength - 1 downto 0) <= data_read(IrLength - 1 downto 0);
+          state_next                          <= st_length;
         elsif (msg_timer = MSG_TIMEOUT) then
           state_next <= st_idle;
         end if;
@@ -327,8 +330,8 @@ begin
           re_next <= '0';
         end if;
 
-        if (RE_O = '1') then
-          data_length_next <= integer(unsigned(data_read));
+        if (re = '1') then
+          data_length_next <= to_integer(unsigned(data_read));
           byte_count_next  <= 0;
 
           case cmd is
@@ -572,8 +575,8 @@ begin
       when st_reset =>
         state      <= st_idle;
         byte_count <= 0;
-        RE_O       <= '0';
-        WE_O       <= '0';
+        re         <= '0';
+        we         <= '0';
         data_send  <= (others => '0');
         address    <= X"01";
         data_read  <= (others => '0');

@@ -32,7 +32,7 @@ architecture TB of TB_UART_TAP is
 
   procedure rec_byte (
     constant data     : std_logic_vector( 7 downto 0);
-    signal drec_i     : out std_logic;
+    signal drec_i     : out std_logic_vector(7 downto 0);
     signal rx_empty_i : out std_logic;
     signal re_i       : in std_logic)
   is
@@ -113,13 +113,13 @@ architecture TB of TB_UART_TAP is
 
   signal dtmcs_select    : std_logic;
   signal dmi_reset       : std_logic;
-  signal dmi_error       : std_logic_vector(2 downto 0);
+  signal dmi_error       : std_logic_vector(1 downto 0);
   signal dmi_write_ready : std_logic;
   signal dmi_write_valid : std_logic;
-  signal dmi_write       : std_logic_vector(7 downto 0);
+  signal dmi_write       : dmi_req_t;
   signal dmi_read_ready  : std_logic;
   signal dmi_read_valid  : std_logic;
-  signal dmi_read        : std_logic_vector(7 downto 0);
+  signal dmi_read        : dmi_resp_t;
 
   signal dmi             : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
 
