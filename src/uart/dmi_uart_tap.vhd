@@ -144,19 +144,22 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   is
   begin
 
-    dmi_next_i <= dmi_i;
-    ready_next <= '1';
+    report "TAP reads DMI";
 
     if (valid = '1') then
       dmi_next_i <= dmi_resp_to_stl(dmi_resp);
       ready_next <= '0';
+    else
+      dmi_next_i <= dmi_i;
+      ready_next <= '1';
     end if;
 
   end procedure read_dmi;
 
   procedure write_register (
     -- Register to write into.
-    signal target : out std_logic_vector;
+    signal target      : in std_logic_vector;
+    signal target_next : out std_logic_vector;
     -- Value  of for incoming register.
     signal data : in  std_logic_vector(7 downto 0);
     -- Count bytes written.
@@ -169,13 +172,15 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   is
   begin
 
+    target_next <= target;
+
     if (byte_count_i < (target'length) / 8) then
-      target(8*(byte_count_i + 1) - 1 downto 8 * byte_count_i) <= data;
+      target_next(8*(byte_count_i + 1) - 1 downto 8 * byte_count_i) <= data;
     elsif (byte_count_i = (target'length) / 8 and target'length mod 8 > 0) then
-      target(target'length - 1 downto 8*byte_count_i) <= data((target'length mod 8 - 1) downto 0);
+      target_next(target'length - 1 downto 8*byte_count_i) <= data((target'length mod 8 - 1) downto 0);
     else
       re_next_i    <= '0';
-      state_next_i <= st_idle;
+      state_next_i <= state_after;
     end if;
 
   end procedure write_register;
@@ -205,8 +210,8 @@ begin
   DMI_READ_READY_O  <= dmi_read_ready;
   data_read         <= DREC_I;
   DSEND_O           <= data_send;
-  RE_O              <= re;
   WE_O              <= we;
+  RE_O              <= re;
 
   TIMEOUT : process (CLK) is
   begin
@@ -253,7 +258,7 @@ begin
         data_length     <= data_length_next;
         address         <= address_next;
         cmd             <= cmd_next;
-        -- Not all bits fo dtmcs a writable:
+        -- Not all bits of dtmcs a writable:
         dtmcs <= dtmcs_next and DTMCS_WRITE_MASK;
         state <= state_next;
       end if;
@@ -261,21 +266,43 @@ begin
 
   end process FSM_CORE;
 
-  FSM : process (state, RX_EMPTY_I, data_read, data_read, data_send, address, byte_count, dtmcs, dmi) is
+  FSM : process (state,
+                 cmd,
+                 we,
+                 re,
+                 RX_EMPTY_I,
+                 TX_READY_I,
+                 data_read,
+                 data_send,
+                 DMI_READ_VALID_I,
+                 dmi_read_ready,
+                 dmi_write_valid,
+                 DMI_WRITE_READY_I,
+                 byte_count,
+                 data_length,
+                 address,
+                 dtmcs,
+                 dmi,
+                 msg_timer) is
   begin
 
     case state is
 
       when st_idle =>
-        re_next        <= '0';
-        we_next        <= '0';
-        address_next   <= address;
-        data_send_next <= (others => '0');
-        dtmcs_next     <= dtmcs;
-        dmi_next       <= dmi;
-        DMI_RESET_O    <= '0';
+        re_next              <= '0';
+        we_next              <= '0';
+        data_send_next       <= (others => '0');
+        dmi_write_valid_next <= '0';
+        dmi_write_next       <= (addr => (others => '0'), data => (others => '0'), op => (others => '0'));
+        dmi_read_ready_next  <= '0';
+        dmi_next             <= dmi;
+        byte_count_next      <= 0;
+        data_length_next     <= 0;
+        address_next         <= address;
+        dtmcs_next           <= dtmcs;
 
-        run_timer <= '0';
+        DMI_RESET_O <= '0';
+        run_timer   <= '0';
 
         if (RX_EMPTY_I = '0') then
           re_next    <= '1';
@@ -367,14 +394,12 @@ begin
 
       when st_wait_read_dmi =>
         state_next <= st_wait_read_dmi;
-        read_dmi (
-          dmi_resp   => DMI_READ_I,
-          ready_next => dmi_read_ready_next,
-          valid      => DMI_READ_VALID_I,
-          dmi_i      => dmi,
-          dmi_next_i => dmi_next);
 
-        if (DMI_READ_VALID_I = '1' and dmi_read_ready = '1') then
+        if (DMI_READ_VALID_I = '0' and dmi_read_ready = '0') then
+          dmi_read_ready_next <= '1';
+        elsif (DMI_READ_VALID_I = '1' and dmi_read_ready = '1') then
+          dmi_next            <= dmi_resp_to_stl(DMI_READ_I);
+          dmi_read_ready_next <= '0';
 
           case cmd is
 
@@ -446,42 +471,44 @@ begin
       when st_write =>
         state_next <= st_write;
         run_timer  <= '1';
+        byte_count_next <= byte_count;
 
         if (RX_EMPTY_I = '1') then
           re_next         <= '0';
-          byte_count_next <= byte_count;
         else
           re_next         <= '1';
-          byte_count_next <= byte_count + 1;
         end if;
 
         if (msg_timer < MSG_TIMEOUT) then
+          if (re = '1') then
+            byte_count_next <= byte_count + 1;
+            case address is
 
-          case address is
+              when X"10" =>               -- Write to dtmcs
+                write_register (
+                  target       => dtmcs,
+                  target_next  => dtmcs_next,
+                  data         => data_read,
+                  byte_count_i => byte_count,
+                  re_next_i    => re_next,
+                  state_after  => st_idle,
+                  state_next_i => state_next);
 
-            when X"10" =>               -- Write to dtmcs
-              write_register (
-                target       => dtmcs_next,
-                data         => data_read,
-                byte_count_i => byte_count,
-                re_next_i    => re_next,
-                state_after  => st_idle,
-                state_next_i => state_next);
+              when X"11" =>
+                write_register (
+                  target       => dmi,
+                  target_next  => dmi_next,
+                  data         => data_read,
+                  byte_count_i => byte_count,
+                  re_next_i    => re_next,
+                  state_after  => st_wait_write_dmi,
+                  state_next_i => state_next);
 
-            when X"11" =>
-              write_register (
-                target       => dmi_next,
-                data         => data_read,
-                byte_count_i => byte_count,
-                re_next_i    => re_next,
-                state_after  => st_wait_write_dmi,
-                state_next_i => state_next);
+              when others =>
+                state_next <= st_idle;
 
-            when others =>
-              state_next <= st_idle;
-
-          end case;
-
+            end case;
+          end if;
         else
           state_next <= st_idle;
         end if;
@@ -534,7 +561,8 @@ begin
                 state_after  => st_idle,
                 state_next_i => state_next);
               write_register (
-                target       => dtmcs_next,
+                target       => dtmcs,
+                target_next  => dtmcs_next,
                 data         => data_read,
                 byte_count_i => byte_count,
                 re_next_i    => re_next,
@@ -550,7 +578,8 @@ begin
                 state_after  => st_wait_write_dmi,
                 state_next_i => state_next);
               write_register (
-                target       => dmi_next,
+                target       => dmi,
+                target_next  => dmi_next,
                 data         => data_read,
                 byte_count_i => byte_count,
                 re_next_i    => re_next,
@@ -573,15 +602,13 @@ begin
         end if;
 
       when st_reset =>
-        state      <= st_idle;
-        byte_count <= 0;
-        re         <= '0';
-        we         <= '0';
-        data_send  <= (others => '0');
-        address    <= X"01";
-        data_read  <= (others => '0');
-        dtmcs      <= (others => '0');
-        dmi        <= (others => '0');
+        state_next      <= st_idle;
+        byte_count_next <= 0;
+        re_next         <= '0';
+        we_next         <= '0';
+        address_next    <= X"01";
+        dtmcs_next      <= (others => '0');
+        dmi_next        <= (others => '0');
         -- Trigger Reset of DMI module.
         DMI_RESET_O <= '1';
         run_timer   <= '0';

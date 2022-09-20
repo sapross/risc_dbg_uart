@@ -37,8 +37,8 @@ architecture TB of TB_UART_TAP is
     signal re_i       : in std_logic)
   is
   begin
-
-    rx_empty_i <= '1';
+    report "Sending byte";
+    rx_empty_i <= '0';
     drec_i     <= (others => '0');
 
     while (re_i = '0') loop
@@ -46,9 +46,8 @@ architecture TB of TB_UART_TAP is
       wait for CLK_PERIOD;
 
     end loop;
-
     drec_i <= data;
-
+    rx_empty_i <= '1';
   end procedure rec_byte;
 
   -- Simulates a write to DMI-Interface
@@ -61,9 +60,9 @@ architecture TB of TB_UART_TAP is
   )
   is
   begin
-
+    report "Writing to dmi";
     ready <= '1';
-
+    wait for CLK_PERIOD;
     while (valid = '0') loop
 
       wait for CLK_PERIOD;
@@ -71,7 +70,6 @@ architecture TB of TB_UART_TAP is
     end loop;
 
     dmi_i <= dmi_req_to_stl(dmi_req_i);
-    ready <= '0';
     wait for CLK_PERIOD;
 
   end procedure write_dmi;
@@ -85,17 +83,16 @@ architecture TB of TB_UART_TAP is
     signal valid      : out std_logic
   ) is
   begin
-
+    report "Reading from dmi";
     dmi_resp_i <= stl_to_dmi_resp(dmi_i);
     valid      <= '1';
-
+    wait for CLK_PERIOD;
     while (ready = '0') loop
 
       wait for CLK_PERIOD;
 
     end loop;
 
-    valid <= '0';
     wait for CLK_PERIOD;
 
   end procedure;
@@ -164,9 +161,12 @@ begin
   MAIN : process is
   begin
 
-    wait for 1 ps;
+    --wait for 1 ps;
     rst <= '1';
-    dmi <= (others => '0');
+    drec <= (others => '0');
+    tx_ready <= '1';
+    rx_empty <= '0';
+    rx_full <= '0';
     wait for CLK_PERIOD;
     rst <= '0';
     wait for 2 * CLK_PERIOD;
@@ -177,17 +177,20 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_READ & "00001",
+        data       => CMD_READ & "00000" or X"01",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
     -- Length of IDCODE register is 4 bytes.
     rec_byte (
         data       => std_logic_vector(to_unsigned(4,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
 
     -- Testing Read from dtmcs
     rec_byte (
@@ -195,35 +198,20 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_READ & "00010",
+        data       => CMD_READ & "00000" or X"10",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
     -- Length of DTMCS register is 4 bytes.
     rec_byte (
         data       => std_logic_vector(to_unsigned(4,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-
-    -- Testing read from dmi
-    rec_byte (
-        data       => HEADER,
-        drec_i     => drec,
-        rx_empty_i => rx_empty,
-        re_i       => re);
-    rec_byte (
-        data       => CMD_READ & "00011",
-        drec_i     => drec,
-        rx_empty_i => rx_empty,
-        re_i       => re);
-    -- Length of a dmi response is 34 bits -> 5 byte.
-    rec_byte (
-        data       => std_logic_vector(to_unsigned(5,8)),
-        drec_i     => drec,
-        rx_empty_i => rx_empty,
-        re_i       => re);
+    wait for CLK_PERIOD;
 
     -- Testing write to dmi
     rec_byte (
@@ -231,17 +219,78 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_WRITE & "00011",
+        data       => CMD_WRITE & "00000" or X"11",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
     -- Length of a dmi request is 41 bits -> 6 byte.
     rec_byte (
         data       => std_logic_vector(to_unsigned(6,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
+    wait for CLK_PERIOD;
+
+    rec_byte (
+        data       => X"12",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    rec_byte (
+        data       => X"34",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    rec_byte (
+        data       => X"56",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    rec_byte (
+        data       => X"78",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    rec_byte (
+        data       => X"9A",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    rec_byte (
+        data       => X"BC",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+
+    -- Testing read from dmi
+    rec_byte (
+        data       => HEADER,
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    rec_byte (
+        data       => CMD_READ & "00000" or X"11",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
+    -- Length of a dmi response is 34 bits -> 5 byte.
+    rec_byte (
+        data       => std_logic_vector(to_unsigned(5,8)),
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    wait for CLK_PERIOD;
 
     wait;
 
@@ -251,7 +300,11 @@ begin
   begin
 
     wait for 1 ps;
-    -- Reset period
+    dmi <= (others => '0');
+    dmi_error <= (others => '0');
+    dmi_write_ready <= '0';
+    dmi_read_valid <= '0';
+    dmi_read <= (data => (others => '0'), resp => (others => '0'));
     wait for 2 * CLK_PERIOD;
 
     while (true) loop
@@ -269,9 +322,9 @@ begin
           ready     => dmi_write_ready,
           valid     => dmi_write_valid);
       end if;
-
+      wait for CLK_PERIOD;
     end loop;
-
+    wait;
   end process DMI_ECHO;
 
 end architecture TB;
