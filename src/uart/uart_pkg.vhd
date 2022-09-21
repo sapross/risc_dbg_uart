@@ -29,6 +29,9 @@ package uart_pkg is
   constant IRLENGTH    : integer := 5;
   constant IDCODEVALUE : std_logic_vector(31 downto 0) := X"00000001";
 
+  constant BYPASS                                                         : std_logic_vector(7 downto 0)  := (others => '0');
+  constant IDCODE                                                         : std_logic_vector(31 downto 0) := X"00000001";
+
   constant HEADER : std_logic_vector( 7 downto 0) := X"01"; -- SOF in ASCII
 
   constant CMD_NOP   : std_logic_vector(7 - IRLENGTH downto 0) := "000";
@@ -36,6 +39,10 @@ package uart_pkg is
   constant CMD_WRITE : std_logic_vector(7 - IRLENGTH downto 0) := "010";
   constant CMD_RW    : std_logic_vector(7 - IRLENGTH downto 0) := "011";
   constant CMD_RESET : std_logic_vector(7 - IRLENGTH downto 0) := "100";
+
+  constant ADDR_IDCODE : std_logic_vector(IRLENGTH-1 downto 0) := "00001";
+  constant ADDR_DTMCS  : std_logic_vector(IRLENGTH-1 downto 0) := "10000";
+  constant ADDR_DMI    : std_logic_vector(IRLENGTH-1 downto 0) := "10001";
 
   constant DTMCS_WRITE_MASK : std_logic_vector(31 downto 0) :=
   (
@@ -66,9 +73,13 @@ package uart_pkg is
     zero0 => (others => '0'),
     idle => (others => '0'),
     dmistat => (others => '0'),
-    ABITS => std_logic_vector(to_unsigned(ABITS, 5)),
-    version => std_logic_vector(to_unsigned(1, 3))
+    ABITS => std_logic_vector(to_unsigned(ABITS, 6)),
+    version => std_logic_vector(to_unsigned(1, 4))
   );
+
+  function dtmcs_to_stl (dtmcs : dtmcs_t) return std_logic_vector;
+  function stl_to_dtmcs (value : std_logic_vector  ) return dtmcs_t;
+  function dtmcs_assign (dtmcs :dtmcs_t; dtmcs_next :dtmcs_t) return dtmcs_t;
 
   type dmi_req_t is record
     addr : std_logic_vector(ABITS - 1 downto 0);
@@ -126,4 +137,43 @@ package body uart_pkg is
 
   end function stl_to_dmi_req;
 
+  function dtmcs_to_stl (dtmcs : dtmcs_t) return std_logic_vector is
+  begin
+    return dtmcs.zero1 &
+      dtmcs.dmihardreset &
+      dtmcs.dmireset &
+      dtmcs.zero0 &
+      dtmcs.idle &
+      dtmcs.dmistat &
+      dtmcs.ABITS &
+      dtmcs.version;
+  end function;
+  function stl_to_dtmcs (value : std_logic_vector  ) return dtmcs_t is
+  begin
+    return (
+    zero1 => (others => '0'),
+    dmihardreset => value(17 downto 17),
+    dmireset => value(16 downto 16),
+    zero0 => (others => '0'),
+    idle => (others => '0'),
+    dmistat => (others => '0'),
+    ABITS => std_logic_vector(to_unsigned(ABITS, 5)),
+    version => std_logic_vector(to_unsigned(1, 3))
+  );
+  end function;
+
+  function dtmcs_assign (dtmcs :dtmcs_t; dtmcs_next :dtmcs_t) return dtmcs_t is
+  begin
+    return (
+    zero1 => (others => '0'),
+    dmihardreset => dtmcs_next.dmihardreset,
+    dmireset => dtmcs_next.dmireset,
+    zero0 => (others => '0'),
+    idle => dtmcs.idle,
+    dmistat => dtmcs.dmistat,
+    ABITS => std_logic_vector(to_unsigned(ABITS, 5)),
+    version => std_logic_vector(to_unsigned(1, 3))
+  );
+
+  end function;
 end package body uart_pkg;

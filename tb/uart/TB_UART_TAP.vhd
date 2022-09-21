@@ -159,7 +159,7 @@ begin
   MAIN : process is
   begin
 
-    --wait for 1 ps;
+    wait for 1 ps;
     rst <= '1';
     drec <= (others => '0');
     tx_ready <= '1';
@@ -177,7 +177,7 @@ begin
         re_i       => re);
     wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_READ & "00000" or X"01",
+        data       => CMD_READ & ADDR_IDCODE,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
@@ -198,7 +198,7 @@ begin
         re_i       => re);
     wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_READ & "00000" or X"10",
+        data       => CMD_READ & ADDR_DTMCS,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
@@ -219,7 +219,7 @@ begin
         re_i       => re);
     wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_WRITE & "00000" or X"11",
+        data       => CMD_WRITE & ADDR_DMI,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
@@ -277,7 +277,7 @@ begin
         re_i       => re);
     wait for CLK_PERIOD;
     rec_byte (
-        data       => CMD_READ & "00000" or X"11",
+        data       => CMD_READ & ADDR_DMI,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
