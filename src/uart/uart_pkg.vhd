@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-13
--- Last update: 2022-09-20
+-- Last update: 2022-09-21
 -- Platform   :
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -44,10 +44,34 @@ package uart_pkg is
     15 downto 0  => '0'
   );
 
+  constant ABITS          : integer := 7;
   constant DMI_REQ_LENGTH : integer := 41;
 
+  type dtmcs_t is record
+    zero1        : std_logic_vector(31 downto 18);
+    dmihardreset : std_logic_vector(17 downto 17);
+    dmireset     : std_logic_vector(16 downto 16);
+    zero0        : std_logic_vector(15 downto 15);
+    idle         : std_logic_vector(14 downto 12);
+    dmistat      : std_logic_vector(11 downto 10);
+    ABITS        : std_logic_vector(9 downto 4);
+    version      : std_logic_vector(3 downto 0);
+  end record;
+
+  constant DTMCS_ZERO : dtmcs_t :=
+  (
+    zero1 => (others => '0'),
+    dmihardreset => (others => '0'),
+    dmireset => (others => '0'),
+    zero0 => (others => '0'),
+    idle => (others => '0'),
+    dmistat => (others => '0'),
+    ABITS => std_logic_vector(to_unsigned(ABITS, 5)),
+    version => std_logic_vector(to_unsigned(1, 3))
+  );
+
   type dmi_req_t is record
-    addr : std_logic_vector(6 downto 0);
+    addr : std_logic_vector(ABITS - 1 downto 0);
     data : std_logic_vector(31 downto 0);
     op   : std_logic_vector(1 downto 0);
   end record;
@@ -72,7 +96,7 @@ package body uart_pkg is
   function dmi_resp_to_stl (dmi_resp : dmi_resp_t) return std_logic_vector is
   begin
 
-    return "000000" & dmi_resp.data & dmi_resp.resp;
+    return "0000000" & dmi_resp.data & dmi_resp.resp;
 
   end function dmi_resp_to_stl;
 

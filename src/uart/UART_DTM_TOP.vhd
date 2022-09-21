@@ -53,35 +53,35 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK      => CLK,
-      RST      => RST,
-      RE       => re,
-      WE       => we,
-      RX       => RXD,
-      TX       => TXD,
-      TX_READY => tx_ready,
-      RX_EMPTY => rx_empty,
-      RX_FULL  => rx_full,
-      DIN      => din,
-      DOUT     => dout
+      CLK        => CLK,
+      RST        => RST,
+      RE_I       => re,
+      WE_I       => we,
+      RX_I       => RXD,
+      TX_O       => TXD,
+      TX_READY_O => tx_ready,
+      RX_EMPTY_O => rx_empty,
+      RX_FULL_O  => rx_full,
+      DSEND_I    => din,
+      DREC_O     => dout
     );
 
-  UART_DTM_1 : entity work.uart_dtm
-    generic map (
-      CLK_RATE  => CLK_RATE,
-      BAUD_RATE => BAUD_RATE,
-      DMI_ABITS => DMI_ABITS
-    )
-    port map (
-      CLK      => CLK,
-      RST      => RST,
-      RE       => re,
-      WE       => we,
-      TX_READY => tx_ready,
-      RX_EMPTY => rx_empty,
-      RX_FULL  => rx_full,
-      DREC     => dout,
-      DSEND    => din
-    );
 
+  -- UART_DTM_1 : entity work.dmi_uart_dtm
+  --   generic map (
+  --     CLK_RATE  => CLK_RATE,
+  --     BAUD_RATE => BAUD_RATE,
+  --     DMI_ABITS => DMI_ABITS
+  --   )
+  --   port map (
+  --     CLK      => CLK,
+  --     RST      => RST,
+  --     RE       => re,
+  --     WE       => we,
+  --     TX_READY => tx_ready,
+  --     RX_EMPTY => rx_empty,
+  --     RX_FULL  => rx_full,
+  --     DREC     => dout,
+  --     DSEND    => din
+  --   );
 end architecture BEHAVIORAL;

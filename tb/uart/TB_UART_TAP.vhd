@@ -62,7 +62,6 @@ architecture TB of TB_UART_TAP is
   begin
     report "Writing to dmi";
     ready <= '1';
-    wait for CLK_PERIOD;
     while (valid = '0') loop
 
       wait for CLK_PERIOD;
@@ -86,7 +85,6 @@ architecture TB of TB_UART_TAP is
     report "Reading from dmi";
     dmi_resp_i <= stl_to_dmi_resp(dmi_i);
     valid      <= '1';
-    wait for CLK_PERIOD;
     while (ready = '0') loop
 
       wait for CLK_PERIOD;

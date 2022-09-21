@@ -78,8 +78,6 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   signal address,         address_next                                    : std_logic_vector(7 downto 0);
   signal cmd,             cmd_next                                        : std_logic_vector(2 downto 0);
 
-  constant BYPASS                                                         : std_logic_vector(7 downto 0)  := (others => '0');
-  constant IDCODE                                                         : std_logic_vector(31 downto 0) := X"00000001";
   signal   dtmcs,         dtmcs_next                                      : std_logic_vector(31 downto 0);
 
   -- Time Out timer to catch unfished operations.
@@ -129,7 +127,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
       data_next((value'length mod 8) - 1 downto 0) <= value(value'length - 1 downto 8 * byte_count_i);
     else
       we_next_i    <= '0';
-      state_next_i <= st_idle;
+      state_next_i <= state_after;
     end if;
 
   end procedure read_register;
@@ -164,6 +162,8 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     signal data : in  std_logic_vector(7 downto 0);
     -- Count bytes written.
     signal byte_count_i : in  integer;
+    signal rx_empty     : in std_logic;
+    signal re_i         : in std_logic;
     signal re_next_i    : out std_logic;
     -- State to assume after completion.
     constant state_after :     state_t;
@@ -173,11 +173,18 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   begin
 
     target_next <= target;
+    re_next_i   <= '1';
 
-    if (byte_count_i < (target'length) / 8) then
+    if (byte_count_i < (target'length / 8)) then
       target_next(8*(byte_count_i + 1) - 1 downto 8 * byte_count_i) <= data;
+      if (RX_EMPTY = '1') then
+        re_next_i <= '0';
+      end if;
     elsif (byte_count_i = (target'length) / 8 and target'length mod 8 > 0) then
       target_next(target'length - 1 downto 8*byte_count_i) <= data((target'length mod 8 - 1) downto 0);
+      if (RX_EMPTY = '1') then
+        re_next_i <= '0';
+      end if;
     else
       re_next_i    <= '0';
       state_next_i <= state_after;
@@ -233,11 +240,12 @@ begin
 
     if rising_edge(CLK) then
       if (RST = '1') then
+        dmi_write <= (addr => (others =>'0'), data => (others=>'0'), op => (others =>'0'));
+
         re              <= '0';
         we              <= '0';
         data_send       <= (others                 => '0');
         dmi_write_valid <= '0';
-        dmi_write       <= (addr => (others =>'0'), data => (others=>'0'), op => (others =>'0'));
         dmi_read_ready  <= '0';
         dmi             <= (others                 => '0');
         byte_count      <= 0;
@@ -245,6 +253,7 @@ begin
         address         <= X"01";
         cmd             <= CMD_NOP;
         dtmcs           <= (others                 => '0');
+        DTMCS_SELECT_O  <= '0';
         state           <= st_idle;
       else
         re              <= re_next;
@@ -257,7 +266,12 @@ begin
         byte_count      <= byte_count_next;
         data_length     <= data_length_next;
         address         <= address_next;
-        cmd             <= cmd_next;
+        if (address_next = X"10") then
+          DTMCS_SELECT_O <= '1';
+        else
+          DTMCS_SELECT_O <= '0';
+        end if;
+        cmd <= cmd_next;
         -- Not all bits of dtmcs a writable:
         dtmcs <= dtmcs_next and DTMCS_WRITE_MASK;
         state <= state_next;
@@ -469,46 +483,47 @@ begin
         end if;
 
       when st_write =>
-        state_next <= st_write;
-        run_timer  <= '1';
+        state_next      <= st_write;
+        run_timer       <= '1';
         byte_count_next <= byte_count;
 
-        if (RX_EMPTY_I = '1') then
-          re_next         <= '0';
-        else
-          re_next         <= '1';
+        if (re = '1') then
+          byte_count_next <= byte_count + 1;
         end if;
 
         if (msg_timer < MSG_TIMEOUT) then
-          if (re = '1') then
-            byte_count_next <= byte_count + 1;
-            case address is
 
-              when X"10" =>               -- Write to dtmcs
-                write_register (
+          case address is
+
+            when X"10" =>               -- Write to dtmcs
+              write_register (
                   target       => dtmcs,
                   target_next  => dtmcs_next,
                   data         => data_read,
                   byte_count_i => byte_count,
+                  rx_empty     => RX_EMPTY_I,
+                  re_i         => re,
                   re_next_i    => re_next,
                   state_after  => st_idle,
                   state_next_i => state_next);
 
-              when X"11" =>
-                write_register (
+            when X"11" =>
+              write_register (
                   target       => dmi,
                   target_next  => dmi_next,
                   data         => data_read,
                   byte_count_i => byte_count,
+                  rx_empty     => RX_EMPTY_I,
+                  re_i         => re,
                   re_next_i    => re_next,
                   state_after  => st_wait_write_dmi,
                   state_next_i => state_next);
 
-              when others =>
-                state_next <= st_idle;
+            when others =>
+              state_next <= st_idle;
 
-            end case;
-          end if;
+          end case;
+
         else
           state_next <= st_idle;
         end if;
@@ -565,6 +580,8 @@ begin
                 target_next  => dtmcs_next,
                 data         => data_read,
                 byte_count_i => byte_count,
+                rx_empty     => RX_EMPTY_I,
+                re_i         => re,
                 re_next_i    => re_next,
                 state_after  => st_idle,
                 state_next_i => state_next);
@@ -582,6 +599,8 @@ begin
                 target_next  => dmi_next,
                 data         => data_read,
                 byte_count_i => byte_count,
+                rx_empty     => RX_EMPTY_I,
+                re_i         => re,
                 re_next_i    => re_next,
                 state_after  => st_wait_write_dmi,
                 state_next_i => state_next);
