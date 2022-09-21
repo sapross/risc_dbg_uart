@@ -85,12 +85,13 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     dmi_read_ready  : std_logic;
     dmi             : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     dtmcs           : std_logic_vector(31 downto 0);
-    -- FSM Signals
-    byte_count  : integer range 0 to DMI_REQ_LENGTH + 1;
-    data_length : integer range 0 to 255;
     address     : std_logic_vector(IrLength - 1 downto 0);
-    cmd         : std_logic_vector(2 downto 0);
+    -- FSM Signals
     state       : state_t;
+    cmd         : std_logic_vector(2 downto 0);
+    -- ToDo: Replace with better integer range.
+    data_length : integer range 0 to 255;
+    byte_count  : integer; -- range 0 to DMI_REQ_LENGTH + 1;
   end record;
 
   signal fsm, fsm_next                                                    : fsm_t;
@@ -301,7 +302,7 @@ begin
       when st_cmdaddr =>
         run_timer      <= '1';
         fsm_next.state <= st_cmdaddr;
-
+        fsm_next.cmd <= CMD_NOP;
         if (RX_EMPTY_I = '0') then
           fsm_next.re <= '1';
         else
@@ -310,8 +311,7 @@ begin
 
         if (fsm.re = '1') then
           fsm_next.cmd                            <= DREC_I(7 downto IrLength);
-          fsm_next.address(7 downto IrLength)     <= (others => '0');
-          fsm_next.address(IrLength - 1 downto 0) <= DREC_I(IrLength - 1 downto 0);
+          fsm_next.address                        <= DREC_I(IrLength - 1 downto 0);
           fsm_next.state                          <= st_length;
         elsif (msg_timer = MSG_TIMEOUT) then
           fsm_next.state <= st_idle;
@@ -320,7 +320,7 @@ begin
       when st_length =>
         fsm_next.state <= st_length;
         run_timer      <= '1';
-
+        fsm_next.cmd <= fsm.cmd;
         if (RX_EMPTY_I = '0') then
           fsm_next.re <= '1';
         else
@@ -387,6 +387,7 @@ begin
         end if;
 
       when st_read =>
+        fsm_next.cmd <= CMD_NOP;
         fsm_next.address <= fsm.address;
         fsm_next.state   <= st_read;
         fsm_next.we      <= TX_READY_I;
