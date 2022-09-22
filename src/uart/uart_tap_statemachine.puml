@@ -1,0 +1,15 @@
+@startuml
+
+[*] --> Idle
+Idle --> Header : !rx_empty
+Header --> CmdAddr : DREC = HEADER
+CmdAddr --> Length : !rx_empty
+Length --> Write : CMD_WRITE
+Length --> Read : CMD_READ
+Length --> RW : CMD_RW
+Length --> Reset : CMD_RESET
+Write --> Idle : SER_DONE & DMI_DONE
+Read --> Idle : SER_DONE & DMI_DONE
+RW --> Idle : SER_DONE & DMI_DONE
+Reset --> Idle
+@enduml
