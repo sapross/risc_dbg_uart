@@ -19,11 +19,11 @@
 --
 
 library IEEE;
-  use IEEE.STD_LOGIC_1164.all;
-  use IEEE.NUMERIC_STD.all;
+  use ieee.std_logic_1164.all;
+  use ieee.numeric_std.all;
 
 library WORK;
-  use WORK.uart_pkg.all;
+  use work.uart_pkg.all;
 
 entity DMI_UART_TAP is
   generic (
@@ -66,9 +66,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     st_header,
     st_cmdaddr,
     st_length,
-    st_wait_read_dmi,
     st_read,
-    st_wait_write_dmi,
     st_write,
     st_rw,
     st_reset
@@ -85,48 +83,32 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     dmi_read_ready  : std_logic;
     dmi             : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     dtmcs           : std_logic_vector(31 downto 0);
-    address     : std_logic_vector(IrLength - 1 downto 0);
+    address         : std_logic_vector(IrLength - 1 downto 0);
+    cmd             : std_logic_vector(2 downto 0);
+    data_length     : unsigned (7 downto 0);
     -- FSM Signals
-    state       : state_t;
-    cmd         : std_logic_vector(2 downto 0);
-    -- ToDo: Replace with better integer range.
-    data_length : integer range 0 to 255;
-    byte_count  : integer; -- range 0 to DMI_REQ_LENGTH + 1;
-  end record;
+    state : state_t;
+  end record fsm_t;
 
-  signal fsm, fsm_next                                                    : fsm_t;
+  signal fsm,         fsm_next                                                    : fsm_t;
 
   -- Time Out timer to catch unfished operations.
   -- Each UART-Frame takes 10 baud periods (1 Start + 8 Data + 1 Stop)
   -- Wait for the time of 5 UART-Frames.
-  constant MSG_TIMEOUT                                                    : integer := 5 * (10 * CLK_RATE / BAUD_RATE);
-  signal   msg_timer                                                      : integer range 0 to MSG_TIMEOUT;
-  signal   run_timer                                                      : std_logic;
+  constant msg_timeout                                                            : integer := 5 * (10 * CLK_RATE / BAUD_RATE);
+  signal   msg_timer                                                              : integer range 0 to msg_timeout;
+  signal   run_timer, timer_overflow                                              : std_logic;
+  -- Number of (paritial) bytes required to save largest register.
+  -- Largest register is DMI, therefore ceil(DMI'length/8) bytes are
+  -- necessary.
+  constant max_bytes                                                              : integer := (DMI_REQ_LENGTH + 7) / 8;
 
-  procedure read_register (
-    -- Register to send.
-    constant value       :     std_logic_vector;
-    constant state_after :     state_t;
-    signal fsm_i         : in fsm_t;
-    signal fsm_next_i    : out fsm_t
-  )
-  is
-  begin
-
-    if (fsm_i.byte_count < (value'length / 8)) then
-      fsm_next_i.data_send <= value(8 * (fsm_i.byte_count + 1) - 1 downto 8 * fsm_i.byte_count);
-    elsif (fsm_i.byte_count = (value'length / 8) and value'length mod 8 > 0) then
-      -- Handle remainder:
-      -- Fill leading bits with zero.
-      fsm_next_i.data_send(7 downto value'length mod 8) <= (others => '0');
-      -- Put remainder of the register in the lower bits.
-      fsm_next_i.data_send((value'length mod 8) - 1 downto 0) <= value(value'length - 1 downto 8 * fsm.byte_count);
-    else
-      fsm_next_i.we    <= '0';
-      fsm_next_i.state <= state_after;
-    end if;
-
-  end procedure read_register;
+  signal ser_run,     ser_done                                                    : std_logic;
+  signal ser_data_in                                                              : std_logic_vector(7 downto 0);
+  signal ser_data_out                                                             : std_logic_vector(7 downto 0);
+  signal ser_reg_out                                                              : std_logic_vector(max_bytes * 8 - 1 downto 0);
+  signal ser_reg_in                                                               : std_logic_vector(max_bytes * 8 - 1 downto 0);
+  signal ser_num_bits                                                             : unsigned(7 downto 0);
 
   procedure read_dmi (
     signal dmi_resp   : in  dmi_resp_t;
@@ -148,39 +130,6 @@ architecture BEHAVIORAL of DMI_UART_TAP is
 
   end procedure read_dmi;
 
-  procedure write_register (
-    -- Register to write into.
-    signal target        : in std_logic_vector;
-    signal target_next   : out std_logic_vector;
-    signal rx_empty      : in std_logic;
-    signal data_read     : in std_logic_vector(7 downto 0);
-    signal fsm_i         : in fsm_t;
-    signal fsm_next_i    : out fsm_t;
-    constant state_after :     state_t
-  )
-  is
-  begin
-
-    target_next   <= target;
-    fsm_next_i.re <= '1';
-
-    if (fsm_i.byte_count < (target'length / 8)) then
-      target_next(8*(fsm_i.byte_count + 1) - 1 downto 8 * fsm_i.byte_count) <= data_read;
-      if (RX_EMPTY = '1') then
-        fsm_next_i.re <= '0';
-      end if;
-    elsif (fsm_i.byte_count = (target'length) / 8 and target'length mod 8 > 0) then
-      target_next(target'length - 1 downto 8*fsm_i.byte_count) <= data_read((target'length mod 8 - 1) downto 0);
-      if (RX_EMPTY = '1') then
-        fsm_next_i.re <= '0';
-      end if;
-    else
-      fsm_next_i.re    <= '0';
-      fsm_next_i.state <= state_after;
-    end if;
-
-  end procedure write_register;
-
   procedure write_dmi (
     signal dmi_req_next : out dmi_req_t;
     signal ready        : in  std_logic;
@@ -201,6 +150,7 @@ architecture BEHAVIORAL of DMI_UART_TAP is
 
 begin
 
+  -- FSM states to output
   DMI_WRITE_VALID_O <= fsm.dmi_write_valid;
   DMI_WRITE_O       <= fsm.dmi_write;
   DMI_READ_READY_O  <= fsm.dmi_read_ready;
@@ -209,15 +159,37 @@ begin
   WE_O    <= fsm.we;
   RE_O    <= fsm.re;
 
+  -- De/Serializer entities for different registers.
+  DE_SERIALIZER_1 : entity work.de_serializer
+    generic map (
+    -- The largest register is DMI with 41 bytes.
+      MAX_BYTES => (DMI_REQ_LENGTH + 7) / 8
+    )
+    port map (
+      CLK      => CLK,
+      RST      => RST,
+      NUM_BITS => ser_num_bits,
+      D_I      => DREC_I,
+      D_O      => fsm.data_send,
+      REG_I    => ser_reg_in,
+      REG_O    => ser_reg_out,
+      RUN_I    => ser_run,
+      DONE_O   => ser_done
+    );
+
   TIMEOUT : process (CLK) is
   begin
 
     if rising_edge(CLK) then
+      -- Timer resets if either no message is in flight (run_timer = 0)
+      -- or new data is in the RX-Fifo.
       if (RST = '1' or run_timer = '0' or RX_EMPTY_I = '0') then
-        msg_timer <= 0;
+        msg_timer      <= 0;
+        timer_overflow <= '0';
       else
-        if (msg_timer < MSG_TIMEOUT and run_timer = '1') then
-          msg_timer <= msg_timer + 1;
+        msg_timer <= msg_timer + 1;
+        if (msg_timer = msg_timeout) then
+          timer_overflow <= '1';
         end if;
       end if;
     end if;
@@ -237,17 +209,20 @@ begin
         fsm.dmi_write_valid <= '0';
         fsm.dmi_read_ready  <= '0';
         fsm.dmi             <= (others                 => '0');
-        fsm.byte_count      <= 0;
-        fsm.data_length     <= 0;
         fsm.address         <= ADDR_IDCODE;
         fsm.cmd             <= CMD_NOP;
-        DTMCS_SELECT_O      <= '0';
-        fsm.dtmcs           <= dtmcs_to_stl(DTMCS_ZERO);
-        fsm.state           <= st_idle;
+
+        DTMCS_SELECT_O <= '0';
+        fsm.dtmcs      <= dtmcs_to_stl(DTMCS_ZERO);
+        fsm.state      <= st_idle;
+        ser_run            <= '0';
       else
-        fsm       <= fsm_next;
-        fsm.dtmcs           <= dtmcs_to_stl(DTMCS_ZERO);
+        fsm <= fsm_next;
+        -- Only bits 17 and 16 of dtmcs are writable.
+        -- Discard the rest.
+        -- fsm.dtmcs           <= dtmcs_to_stl(DTMCS_ZERO);
         fsm.dtmcs(17 downto 16) <= fsm_next.dtmcs(17 downto 16);
+        -- Signal that DTMCS has been selected.
         if (fsm_next.address = ADDR_DTMCS) then
           DTMCS_SELECT_O <= '1';
         else
@@ -266,89 +241,89 @@ begin
     case fsm.state is
 
       when st_idle =>
-        fsm_next.re              <= '0';
+        -- Reset some signals to defaults.
         fsm_next.we              <= '0';
         fsm_next.data_send       <= (others => '0');
         fsm_next.dmi_write_valid <= '0';
         fsm_next.dmi_write       <= (addr => (others => '0'), data => (others => '0'), op => (others => '0'));
         fsm_next.dmi_read_ready  <= '0';
-        fsm_next.byte_count      <= 0;
-        fsm_next.data_length     <= 0;
 
         fsm_next.cmd <= CMD_NOP;
 
-        DMI_RESET_O  <= '0';
-        run_timer    <= '0';
+        DMI_RESET_O <= '0';
 
+        -- No message in flight.
+        run_timer <= '0';
+
+        -- Without data to read, remain in idle state.
         if (RX_EMPTY_I = '0') then
           fsm_next.re    <= '1';
           fsm_next.state <= st_header;
-        end if;
-
-      when st_header =>
-        fsm_next.we    <= '0';
-        fsm_next.state <= st_header;
-
-        if (RX_EMPTY_I = '0') then
-          fsm_next.re <= '1';
         else
-          fsm_next.re <= '0';
-        end if;
-
-        if (fsm.re = '1' and DREC_I = HEADER) then
-          fsm_next.state <= st_cmdaddr;
-        end if;
-
-      when st_cmdaddr =>
-        run_timer      <= '1';
-        fsm_next.state <= st_cmdaddr;
-        fsm_next.cmd <= CMD_NOP;
-        if (RX_EMPTY_I = '0') then
-          fsm_next.re <= '1';
-        else
-          fsm_next.re <= '0';
-        end if;
-
-        if (fsm.re = '1') then
-          fsm_next.cmd                            <= DREC_I(7 downto IrLength);
-          fsm_next.address                        <= DREC_I(IrLength - 1 downto 0);
-          fsm_next.state                          <= st_length;
-        elsif (msg_timer = MSG_TIMEOUT) then
+          fsm_next.re    <= '0';
           fsm_next.state <= st_idle;
         end if;
 
-      when st_length =>
-        fsm_next.state <= st_length;
-        run_timer      <= '1';
-        fsm_next.cmd <= fsm.cmd;
+      when st_header =>
+        -- Is the byte from RX fifo equal to our header?
+        if (DREC_I = HEADER) then
+          -- If yes, proceed to CmdAddr.
+          fsm_next.state <= st_cmdaddr;
+        else
+          -- otherwise back to idle.
+          fsm_next.state <= st_idle;
+        end if;
+
+      when st_cmdaddr =>
+        -- Message is in flight. Run the timer to catch a message
+        -- timeout.
+        run_timer <= '1';
+
+        -- Trigger reading of a byte from RX fifo.
         if (RX_EMPTY_I = '0') then
           fsm_next.re <= '1';
         else
           fsm_next.re <= '0';
         end if;
 
+        -- Have we read a byte from RX fifo?
         if (fsm.re = '1') then
-          fsm_next.data_length <= to_integer(unsigned(DREC_I));
-          fsm_next.byte_count  <= 0;
+          -- If yes, decode into command and address.
+          fsm_next.cmd     <= DREC_I(7 downto IrLength);
+          fsm_next.address <= DREC_I(IrLength - 1 downto 0);
+          -- Move to next state.
+          fsm_next.state <= st_length;
+        else
+          -- Have we hit the message timeout? If yes, back to idle.
+          if (timer_overflow = '1') then
+            fsm_next.state <= st_idle;
+          end if;
+        end if;
 
+      when st_length =>
+        -- Trigger reading of a byte from RX fifo.
+        if (RX_EMPTY_I = '0') then
+          fsm_next.re <= '1';
+        else
+          fsm_next.re <= '0';
+        end if;
+
+        -- Have we read a byte from RX fifo?
+        if (fsm.re = '1') then
+          -- Apply byte as unsigned integer to data_length.
+          fsm_next.data_length <= unsigned(DREC_I);
+
+          -- Move on to the next state determined by command.
           case fsm.cmd is
 
             when CMD_READ =>
-              if (fsm.address = ADDR_DMI) then
-                fsm_next.state <= st_wait_read_dmi;
-              else
-                fsm_next.state <= st_read;
-              end if;
+              fsm_next.state <= st_read;
 
             when CMD_WRITE =>
               fsm_next.state <= st_write;
 
             when CMD_RW =>
-              if (fsm.address = ADDR_DMI) then
-                fsm_next.state <= st_wait_read_dmi;
-              else
-                fsm_next.state <= st_rw;
-              end if;
+              fsm_next.state <= st_rw;
 
             when CMD_RESET =>
               fsm_next.state <= st_reset;
@@ -358,71 +333,123 @@ begin
 
           end case;
 
-        elsif (msg_timer = MSG_TIMEOUT) then
-          fsm_next.state <= st_idle;
-        end if;
-
-      when st_wait_read_dmi =>
-        fsm_next.state <= st_wait_read_dmi;
-
-        if (DMI_READ_VALID_I = '0' and fsm.dmi_read_ready = '0') then
-          fsm_next.dmi_read_ready <= '1';
-        elsif (DMI_READ_VALID_I = '1' and fsm.dmi_read_ready = '1') then
-          fsm_next.dmi            <= dmi_resp_to_stl(DMI_READ_I);
-          fsm_next.dmi_read_ready <= '0';
-
-          case fsm.cmd is
-
-            when CMD_READ =>
-              fsm_next.state <= st_read;
-
-            when CMD_RW =>
-              fsm_next.state <= st_rw;
-
-            when others =>
-              fsm_next.state <= st_idle;
-
-          end case;
-
+        else
+          -- Have we hit the message timeout? If yes, back to idle.
+          if (timer_overflow = '1') then
+            fsm_next.state <= st_idle;
+          end if;
         end if;
 
       when st_read =>
-        fsm_next.cmd <= CMD_NOP;
-        fsm_next.address <= fsm.address;
-        fsm_next.state   <= st_read;
-        fsm_next.we      <= TX_READY_I;
-        run_timer        <= '1';
+        -- A message with read-command is finished after length byte.
+        run_timer <= '0';
+        -- Always write when TX is ready.
+        fsm_next.we <= TX_READY_I;
 
-        if (TX_READY_I = '1') then
-          fsm_next.byte_count <= fsm.byte_count + 1;
-        else
-          fsm_next.byte_count <= fsm.byte_count;
+        case fsm.address is
+
+          -- Dependent on address, load up the serializers register input
+          -- with the appropriate data.
+          when ADDR_IDCODE =>
+            -- IDCODE Register has 32 bits.
+            ser_num_bits                                                <= to_unsigned(32, 8);
+            ser_reg_in(ser_reg_in'length - 1 downto IDCODEVALUE'length) <= (others => '0');
+            ser_reg_in(IDCODEVALUE'length - 1 downto 0)                 <= IDCODEVALUE;
+            ser_run                                                     <= fsm_next.we;
+
+          when ADDR_DTMCS =>
+            ser_num_bits                                              <= to_unsigned(fsm.dtmcs'length, 8);
+            ser_reg_in(ser_reg_in'length - 1 downto fsm.dtmcs'length) <= (others => '0');
+            ser_reg_in(fsm.dtmcs'length - 1 downto 0)                 <= fsm.dtmcs;
+            ser_run                                                   <= fsm_next.we;
+
+          when ADDR_DMI =>
+            ser_num_bits                                            <= to_unsigned(fsm.dmi'length, 8);
+            ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
+            ser_reg_in(fsm.dmi'length - 1 downto 0)                 <= fsm.dmi;
+            ser_run                                                 <= fsm_next.we;
+
+          when others =>
+            fsm_next.data_send <= (others => '0');
+            fsm_next.state     <= st_idle;
+
+        end case;
+
+        if (ser_done = '1') then
+          -- We are done sending if our serializer is done.
+          -- ToDo: Wait for DMI done signal
+          fsm_next.state <= st_idle;
         end if;
 
-        if (msg_timer < MSG_TIMEOUT) then
+      when st_write =>
+
+        -- Always read when rx-fifo is not empty:
+        if (RX_EMPTY_I = '0') then
+          fsm_next.re <= '1';
+        else
+          fsm_next.re <= '0';
+        end if;
+
+        case fsm.address is
+
+          -- Address decides into which register DREC_I is serialized into.
+          when ADDR_DTMCS =>
+            ser_num_bits   <= to_unsigned(fsm.dtmcs'length, 8);
+            fsm_next.dtmcs <= ser_reg_out;
+            ser_run        <= fsm_next.re;
+
+          when ADDR_DMI =>
+            ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
+            fsm_next.dmi <= ser_reg_out;
+            ser_run      <= fsm_next.re;
+
+          when others =>
+            fsm_next.state <= st_idle;
+
+        end case;
+
+        if (timer_overflow = '1' or ser_done = '1') then
+          -- Writing is done, if either our serializer is done or message
+          -- timeout is reached.
+          -- ToDo: Wait for dmi.
+          fsm_next.state <= st_idle;
+        end if;
+
+      when st_rw =>
+        -- Read and write is performed simultaneously. Requires TX to be both
+        -- ready to send and RX-Fifo to be not empty.
+        if (TX_READY_I = '1' and RX_EMPTY_I = '0') then
+          fsm_next.we <= '1';
+          fsm_next.re <= '1';
+        else
+          fsm_next.we <= '0';
+          fsm_next.re <= '0';
+        end if;
+
+        if (msg_timer < msg_timeout) then
 
           case fsm.address is
 
             when ADDR_IDCODE =>
-              read_register (
-                value        => IDCODEVALUE,
-                state_after  => st_idle,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next);
+              -- IDCODE is read-only.
+              ser_num_bits                                                <= to_unsigned(32, 8);
+              ser_reg_in(ser_reg_in'length - 1 downto IDCODEVALUE'length) <= (others => '0');
+              ser_reg_in(IDCODEVALUE'length - 1 downto 0)                 <= IDCODEVALUE;
+              ser_run                                                     <= fsm_next.we;
 
             when ADDR_DTMCS =>
-              read_register (
-                value        => fsm.dtmcs,
-                state_after  => st_idle,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next);
+              ser_num_bits                                              <= to_unsigned(fsm.dtmcs'length, 8);
+              ser_reg_in(ser_reg_in'length - 1 downto fsm.dtmcs'length) <= (others => '0');
+              ser_reg_in(fsm.dtmcs'length - 1 downto 0)                 <= fsm.dtmcs;
+              fsm_next.dtmcs                                            <= ser_reg_out;
+              ser_run                                                   <= fsm_next.we;
 
             when ADDR_DMI =>
-              read_register (
-                value        => fsm.dmi,
-                state_after  => st_idle,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next);
+              ser_num_bits                                            <= to_unsigned(fsm.dmi'length, 8);
+              ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
+              ser_reg_in(fsm.dmi'length - 1 downto 0)                 <= fsm.dmi;
+              fsm_next.dmi                                            <= ser_reg_out;
+              ser_run                                                 <= fsm_next.we;
 
             when others =>
               fsm_next.data_send <= (others => '0');
@@ -434,133 +461,8 @@ begin
           fsm_next.state <= st_idle;
         end if;
 
-      when st_write =>
-        fsm_next.state      <= st_write;
-        run_timer           <= '1';
-        fsm_next.byte_count <= fsm.byte_count;
-
-        if (fsm.re = '1') then
-          fsm_next.byte_count <= fsm.byte_count + 1;
-        end if;
-
-        if (msg_timer < MSG_TIMEOUT) then
-
-          case fsm.address is
-
-            when ADDR_DTMCS =>               -- Write to dtmcs
-              write_register (
-                  target       => fsm.dtmcs,
-                  target_next  => fsm_next.dtmcs,
-                  rx_empty     => RX_EMPTY_I,
-                  data_read    => DREC_I,
-                  fsm_i        => fsm,
-                  fsm_next_i   => fsm_next,
-                  state_after  => st_idle);
-
-            when ADDR_DMI =>
-              write_register (
-                  target       => fsm.dmi,
-                  target_next  => fsm_next.dmi,
-                  rx_empty     => RX_EMPTY_I,
-                  data_read    => DREC_I,
-                  fsm_i        => fsm,
-                  fsm_next_i   => fsm_next,
-                  state_after  => st_wait_write_dmi);
-
-            when others =>
-              fsm_next.state <= st_idle;
-
-          end case;
-
-        else
-          fsm_next.state <= st_idle;
-        end if;
-
-      when st_wait_write_dmi =>
-        fsm_next.state <= st_wait_write_dmi;
-        write_dmi (
-          dmi_req_next => fsm_next.dmi_write,
-          ready        => DMI_WRITE_READY_I,
-          valid_next   => fsm_next.dmi_write_valid,
-          dmi_i        => fsm.dmi);
-
-        if (fsm.dmi_write_valid = '1' and DMI_WRITE_READY_I = '1') then
-          fsm_next.state <= st_idle;
-        end if;
-
-      when st_rw =>
-        fsm_next.state <= st_rw;
-        run_timer      <= '1';
-
-        if (TX_READY_I = '1' and RX_EMPTY_I = '0') then
-          fsm_next.we         <= '1';
-          fsm_next.re         <= '1';
-          fsm_next.byte_count <= fsm.byte_count + 1;
-        else
-          fsm_next.we         <= '1';
-          fsm_next.re         <= '1';
-          fsm_next.byte_count <= fsm.byte_count;
-        end if;
-
-        if (msg_timer < MSG_TIMEOUT) then
-
-          case fsm.address is
-
-            when ADDR_IDCODE =>
-              read_register (
-                value        => IDCODE,
-                state_after  => st_idle,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next);
-
-            when ADDR_DTMCS =>
-              read_register (
-                value        => fsm.dtmcs,
-                state_after  => st_idle,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next);
-              write_register (
-                target       => fsm.dtmcs,
-                target_next  => fsm_next.dtmcs,
-                rx_empty     => RX_EMPTY_I,
-                data_read    => DREC_I,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next,
-                state_after  => st_idle);
-
-            when ADDR_DMI =>
-              read_register (
-                value        => fsm.dmi,
-                state_after  => st_wait_write_dmi,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next);
-              write_register (
-                target       => fsm.dmi,
-                target_next  => fsm_next.dmi,
-                data_read    => DREC_I,
-                rx_empty     => RX_EMPTY_I,
-                fsm_i        => fsm,
-                fsm_next_i   => fsm_next,
-                state_after  => st_wait_write_dmi);
-
-            when others =>
-              fsm_next.data_send <= (others => '0');
-
-              if (fsm.address = ADDR_DMI) then
-                fsm_next.state <= st_wait_write_dmi;
-              else
-                fsm_next.state <= st_idle;
-              end if;
-
-          end case;
-
-        else
-          fsm_next.state <= st_idle;
-        end if;
-
       when st_reset =>
         fsm_next.state      <= st_idle;
-        fsm_next.byte_count <= 0;
         fsm_next.re         <= '0';
         fsm_next.we         <= '0';
         fsm_next.address    <= ADDR_IDCODE;
@@ -569,6 +471,7 @@ begin
         -- Trigger Reset of DMI module.
         DMI_RESET_O <= '1';
         run_timer   <= '0';
+        ser_run     <= '0';
 
     end case;
 
