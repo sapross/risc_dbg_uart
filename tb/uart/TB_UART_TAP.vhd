@@ -38,18 +38,18 @@ architecture TB of TB_UART_TAP is
   is
   begin
 
-    report "Sending byte";
+    -- report "Sending byte";
     rx_empty_i <= '0';
     drec_i     <= (others => '0');
-
     while (re_i = '0') loop
-
       wait for CLK_PERIOD;
-
     end loop;
 
-    drec_i     <= data;
-    rx_empty_i <= '1';
+    if (re_i = '1') then
+      drec_i <= data;
+      wait for CLK_PERIOD;
+    else
+      end if;
 
   end procedure rec_byte;
 
@@ -65,17 +65,17 @@ architecture TB of TB_UART_TAP is
   )
   is
   begin
-
-    if (read_i = '1' and write_i = '0') then
-      dmi_o <= local_dmi;
-    elsif (read_i = '0' and write_i = '1') then
-      local_dmi <= dmi_i;
-    elsif (read_i = '1' and write_i = '1') then
-      dmi_o     <= local_dmi;
-      local_dmi <= dmi_i;
-    end if;
-
     if (read_i = '1' or write_i = '1') then
+
+      if (read_i = '1' and write_i = '0') then
+        dmi_o <= local_dmi;
+      elsif (read_i = '0' and write_i = '1') then
+        local_dmi <= dmi_i;
+      elsif (read_i = '1' and write_i = '1') then
+        dmi_o     <= local_dmi;
+        local_dmi <= dmi_i;
+      end if;
+
       wait for CLK_PERIOD;
       done_o <= '1';
       wait for CLK_PERIOD;
@@ -138,7 +138,7 @@ begin
       DMI_WRITE_O    => dmi_write,
       DMI_O          => tap_dmi,
       DMI_I          => handler_dmi,
-      DONE_O         => done
+      DMI_DONE_I         => done
     );
 
   CLK_PROCESS : process is
@@ -199,20 +199,17 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => CMD_READ & ADDR_IDCODE,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     -- Length of IDCODE register is 4 bytes.
     rec_byte (
         data       => std_logic_vector(to_unsigned(4,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
 
     -- Testing Read from dtmcs
     rec_byte (
@@ -220,20 +217,17 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => CMD_READ & ADDR_DTMCS,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     -- Length of DTMCS register is 4 bytes.
     rec_byte (
         data       => std_logic_vector(to_unsigned(4,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
 
     -- Testing write to dmi
     rec_byte (
@@ -241,57 +235,48 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => CMD_WRITE & ADDR_DMI,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     -- Length of a dmi request is 41 bits -> 6 byte.
     rec_byte (
         data       => std_logic_vector(to_unsigned(6,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
 
     rec_byte (
         data       => X"12",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => X"34",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => X"56",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => X"78",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => X"9A",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => X"BC",
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
 
     -- Testing read from dmi
     rec_byte (
@@ -299,20 +284,17 @@ begin
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     rec_byte (
         data       => CMD_READ & ADDR_DMI,
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
     -- Length of a dmi response is 34 bits -> 5 byte.
     rec_byte (
         data       => std_logic_vector(to_unsigned(5,8)),
         drec_i     => drec,
         rx_empty_i => rx_empty,
         re_i       => re);
-    wait for CLK_PERIOD;
 
     wait;
 

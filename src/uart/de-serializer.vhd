@@ -71,7 +71,7 @@ begin  -- architecture BEHAVIORAL
 
   end process COUNTER;
 
-  DONE_PROC : process (byte_count, NUM_BITS_I) is
+  DONE_PROC : process (RST, byte_count, NUM_BITS_I) is
   begin
 
     if (to_unsigned(8 * byte_count, NUM_BITS_I'length) < NUM_BITS_I or RST = '1') then
