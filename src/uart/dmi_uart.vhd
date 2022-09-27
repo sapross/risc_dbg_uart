@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-26
--- Last update: 2022-09-26
+-- Last update: 2022-09-27
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ entity DMI_UART is
     TAP_WRITE_I       : in    std_logic;
     DMI_I             : in    std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     DMI_O             : out   std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-
+    DONE_O            : out   std_logic;
     --- Ready/Valid Bus towards DM
     DMI_READ_VALID_I  : in    std_logic;
     DMI_READ_READY_O  : out   std_logic;
@@ -72,6 +72,7 @@ architecture BEHAVIORAL of DMI_UART is
 begin  -- architecture BEHAVIORAL
 
   -- Connect FSM variables to outgoing signals
+  DONE_O            <= fsm.done;
   DMI_WRITE_O       <= stl_to_dmi_req(fsm.dmi);
   DMI_O             <= fsm.dmi;
   DMI_READ_READY_I  <= fsm.dmi_read_ready;

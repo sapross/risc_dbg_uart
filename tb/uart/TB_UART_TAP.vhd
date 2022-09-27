@@ -23,10 +23,10 @@ end entity TB_UART_TAP;
 
 architecture TB of TB_UART_TAP is
 
-  constant BAUD_RATE     : integer := 3 * 10 ** 6;    -- Hz
-  constant BAUD_PERIOD   : time    := 333 ns;         -- ns;
-  constant CLK_RATE      : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD    : time    := 10 ns;          -- ns;
+  constant BAUD_RATE               : integer := 3 * 10 ** 6;    -- Hz
+  constant BAUD_PERIOD             : time    := 333 ns;         -- ns;
+  constant CLK_RATE                : integer := 100 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD              : time    := 10 ns;          -- ns;
 
   -- Simulates receiving a byte from UART-Interface.
 
@@ -37,6 +37,7 @@ architecture TB of TB_UART_TAP is
     signal re_i       : in std_logic)
   is
   begin
+
     report "Sending byte";
     rx_empty_i <= '0';
     drec_i     <= (others => '0');
@@ -46,77 +47,72 @@ architecture TB of TB_UART_TAP is
       wait for CLK_PERIOD;
 
     end loop;
-    drec_i <= data;
+
+    drec_i     <= data;
     rx_empty_i <= '1';
+
   end procedure rec_byte;
 
-  -- Simulates a write to DMI-Interface
+  -- Simulates the behavior of the dmi_handler
 
-  procedure write_dmi (
-    signal dmi_i     : out std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    signal dmi_req_i : in dmi_req_t;
-    signal ready     : out std_logic;
-    signal valid     : in std_logic
+  procedure dmi_handler (
+    signal read_i    : in std_logic;
+    signal write_i   : in std_logic;
+    signal dmi_o     : out std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    signal dmi_i     : in std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    signal local_dmi : inout std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    signal done_o    : out std_logic
   )
   is
   begin
-    report "Writing to dmi";
-    ready <= '1';
-    while (valid = '0') loop
 
+    if (read_i = '1' and write_i = '0') then
+      dmi_o <= local_dmi;
+    elsif (read_i = '0' and write_i = '1') then
+      local_dmi <= dmi_i;
+    elsif (read_i = '1' and write_i = '1') then
+      dmi_o     <= local_dmi;
+      local_dmi <= dmi_i;
+    end if;
+
+    if (read_i = '1' or write_i = '1') then
+      wait for CLK_PERIOD;
+      done_o <= '1';
       wait for CLK_PERIOD;
 
-    end loop;
+      while (read_i = '1' or write_i ='1') loop
 
-    dmi_i <= dmi_req_to_stl(dmi_req_i);
-    wait for CLK_PERIOD;
+        wait for CLK_PERIOD;
 
-  end procedure write_dmi;
+      end loop;
 
-  -- Simulates a read from the DMI-Interace.
-
-  procedure read_dmi (
-    signal dmi_i      : in std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    signal dmi_resp_i : out dmi_resp_t;
-    signal ready      : in std_logic;
-    signal valid      : out std_logic
-  ) is
-  begin
-    report "Reading from dmi";
-    dmi_resp_i <= stl_to_dmi_resp(dmi_i);
-    valid      <= '1';
-    while (ready = '0') loop
-
+      done_o <= '0';
+    else
       wait for CLK_PERIOD;
+    end if;
 
-    end loop;
+  end procedure dmi_handler;
 
-    wait for CLK_PERIOD;
+  signal clk                       : std_logic;
+  signal rst                       : std_logic;
 
-  end procedure;
+  signal we                        : std_logic;
+  signal re                        : std_logic;
+  signal tx_ready                  : std_logic;
+  signal rx_empty                  : std_logic;
+  signal rx_full                   : std_logic;
+  signal dsend                     : std_logic_vector(7 downto 0);
+  signal drec                      : std_logic_vector(7 downto 0);
 
-  signal clk             : std_logic;
-  signal rst             : std_logic;
-
-  signal we              : std_logic;
-  signal re              : std_logic;
-  signal tx_ready        : std_logic;
-  signal rx_empty        : std_logic;
-  signal rx_full         : std_logic;
-  signal dsend           : std_logic_vector(7 downto 0);
-  signal drec            : std_logic_vector(7 downto 0);
-
-  signal dtmcs_select    : std_logic;
-  signal dmi_reset       : std_logic;
-  signal dmi_error       : std_logic_vector(1 downto 0);
-  signal dmi_write_ready : std_logic;
-  signal dmi_write_valid : std_logic;
-  signal dmi_write       : dmi_req_t;
-  signal dmi_read_ready  : std_logic;
-  signal dmi_read_valid  : std_logic;
-  signal dmi_read        : dmi_resp_t;
-
-  signal dmi             : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal dtmcs_select              : std_logic;
+  signal dmi_reset                 : std_logic;
+  signal dmi_error                 : std_logic_vector(1 downto 0);
+  signal dmi_read                  : std_logic;
+  signal dmi_write                 : std_logic;
+  signal tap_dmi                   : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal handler_dmi               : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal local_dmi                 : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal done                      : std_logic;
 
 begin
 
@@ -126,24 +122,23 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK               => clk,
-      RST               => rst,
-      RE_O              => re,
-      WE_O              => we,
-      TX_READY_I        => tx_ready,
-      RX_EMPTY_I        => rx_empty,
-      RX_FULL_I         => rx_full,
-      DSEND_O           => dsend,
-      DREC_I            => drec,
-      DTMCS_SELECT_O    => dtmcs_select,
-      DMI_RESET_O       => dmi_reset,
-      DMI_ERROR_I       => dmi_error,
-      DMI_WRITE_READY_I => dmi_write_ready,
-      DMI_WRITE_VALID_O => dmi_write_valid,
-      DMI_WRITE_O       => dmi_write,
-      DMI_READ_READY_O  => dmi_read_ready,
-      DMI_READ_VALID_I  => dmi_read_valid,
-      DMI_READ_I        => dmi_read
+      CLK            => clk,
+      RST            => rst,
+      RE_O           => re,
+      WE_O           => we,
+      TX_READY_I     => tx_ready,
+      RX_EMPTY_I     => rx_empty,
+      RX_FULL_I      => rx_full,
+      DSEND_O        => dsend,
+      DREC_I         => drec,
+      DTMCS_SELECT_O => dtmcs_select,
+      DMI_RESET_O    => dmi_reset,
+      DMI_ERROR_I    => dmi_error,
+      DMI_READ_O     => dmi_read,
+      DMI_WRITE_O    => dmi_write,
+      DMI_O          => tap_dmi,
+      DMI_I          => handler_dmi,
+      DONE_O         => done
     );
 
   CLK_PROCESS : process is
@@ -156,17 +151,46 @@ begin
 
   end process CLK_PROCESS;
 
+  DMI_ECHO : process is
+  begin
+
+    wait for 1 ps;
+    local_dmi   <= (others => '0');
+    handler_dmi <= (others => '0');
+    dmi_error   <= (others => '0');
+    dmi_write   <= '0';
+    dmi_read    <= '0';
+    done        <= '0';
+    wait for 2 * CLK_PERIOD;
+
+    while (true) loop
+
+      dmi_handler (
+          read_i    => dmi_read,
+          write_i   => dmi_write,
+          dmi_i     => tap_dmi,
+          dmi_o     => handler_dmi,
+          local_dmi => local_dmi,
+          done_o    => done
+          );
+      -- wait for CLK_PERIOD;
+
+    end loop;
+
+    wait;
+
+  end process DMI_ECHO;
   MAIN : process is
   begin
 
     wait for 1 ps;
-    rst <= '1';
-    drec <= (others => '0');
+    rst      <= '1';
+    drec     <= (others => '0');
     tx_ready <= '1';
-    rx_empty <= '0';
-    rx_full <= '0';
+    rx_empty <= '1';
+    rx_full  <= '0';
     wait for CLK_PERIOD;
-    rst <= '0';
+    rst      <= '0';
     wait for 2 * CLK_PERIOD;
 
     -- Testing Read from IDCODE
@@ -294,35 +318,5 @@ begin
 
   end process MAIN;
 
-  DMI_ECHO : process is
-  begin
-
-    wait for 1 ps;
-    dmi <= (others => '0');
-    dmi_error <= (others => '0');
-    dmi_write_ready <= '0';
-    dmi_read_valid <= '0';
-    dmi_read <= (data => (others => '0'), resp => (others => '0'));
-    wait for 2 * CLK_PERIOD;
-
-    while (true) loop
-
-      if (dmi_read_ready = '1') then
-        read_dmi (
-          dmi_i      => dmi,
-          dmi_resp_i => dmi_read,
-          ready      => dmi_read_ready,
-          valid      => dmi_read_valid);
-      elsif (dmi_write_valid = '1') then
-        write_dmi (
-          dmi_i     => dmi,
-          dmi_req_i => dmi_write,
-          ready     => dmi_write_ready,
-          valid     => dmi_write_valid);
-      end if;
-      wait for CLK_PERIOD;
-    end loop;
-    wait;
-  end process DMI_ECHO;
 
 end architecture TB;
