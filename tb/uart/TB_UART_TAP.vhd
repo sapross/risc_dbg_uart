@@ -272,6 +272,54 @@ begin
         rx_empty_i => rx_empty,
         re_i       => re);
 
+    -- Testing rw to dmi
+    rec_byte (
+        data       => HEADER,
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    rec_byte (
+        data       => CMD_RW & ADDR_DMI,
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    -- Length of a dmi request is 41 bits -> 6 byte.
+    rec_byte (
+        data       => std_logic_vector(to_unsigned(6,8)),
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+
+    rec_byte (
+        data       => X"BC",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    rec_byte (
+        data       => X"9A",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    rec_byte (
+        data       => X"78",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    rec_byte (
+        data       => X"56",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    rec_byte (
+        data       => X"34",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
+    rec_byte (
+        data       => X"12",
+        drec_i     => drec,
+        rx_empty_i => rx_empty,
+        re_i       => re);
     wait;
 
   end process MAIN;
