@@ -233,10 +233,10 @@ begin
         -- Without data to read, remain in idle state.
         if (RX_EMPTY_I = '0') then
           fsm_next.state <= st_header;
-        else
-          fsm_next.state <= st_idle;
         end if;
+
       when st_header =>
+        --If RX-Fifo is not empty, read and check received byte for HEADER.
         if (RX_EMPTY_I = '0') then
           re <= '1';
           -- Is the byte from RX fifo equal to our header?
@@ -244,12 +244,11 @@ begin
             -- If yes, proceed to CmdAddr.
             fsm_next.state <= st_cmdaddr;
           end if;
-        else
-          re <= '0';
         end if;
 
       when st_cmdaddr =>
-        -- Trigger reading of a byte from RX fifo.
+        -- If RX-Fifo is not empty, read and and apply received byte to cmd and
+        -- address.
         if (RX_EMPTY_I = '0') then
           re <= '1';
           -- Decode into command and address.
@@ -258,7 +257,6 @@ begin
           -- Move to next state.
           fsm_next.state <= st_length;
         else
-          re <= '0';
           -- Have we hit the message timeout? If yes, back to idle.
           if (timer_overflow = '1') then
             fsm_next.state <= st_idle;
@@ -266,7 +264,8 @@ begin
         end if;
 
       when st_length =>
-        -- Trigger reading of a byte from RX fifo.
+        -- If RX-Fifo is not empty, read and and apply received byte to
+        -- data_length.
         if (RX_EMPTY_I = '0') then
           re <= '1';
           -- Apply byte as unsigned integer to data_length.
@@ -293,7 +292,6 @@ begin
           end case;
 
         else
-          re <= '0';
           -- Have we hit the message timeout? If yes, back to idle.
           if (timer_overflow = '1') then
             fsm_next.state <= st_idle;
@@ -301,78 +299,59 @@ begin
         end if;
 
       when st_read =>
+        -- Serialize addressed register into bytes and send over TX.
+        -- De-/Serializer is active during this state.
         ser_reset <= '0';
-        -- Always write when TX is ready.
+        -- If serialization is not done...
         if (ser_done = '0') then
-          if (TX_READY_I = '1') then
-            we      <= '1';
-            ser_run <= '1';
-
-            case fsm.address is
-
-              -- Dependent on address, load up the serializers register input
-              -- with the appropriate data.
-              when ADDR_IDCODE =>
-                ser_reg_in(ser_reg_in'length - 1 downto IDCODEVALUE'length) <= (others => '0');
-                ser_reg_in(IDCODEVALUE'length - 1 downto 0)                 <= IDCODEVALUE;
-                -- IDCODE Register has 32 bits.
-                ser_num_bits <= to_unsigned(32, 8);
-
-              when ADDR_DTMCS =>
-                ser_reg_in(ser_reg_in'length - 1 downto fsm.dtmcs'length) <= (others => '0');
-                ser_reg_in(fsm.dtmcs'length - 1 downto 0)                 <= fsm.dtmcs;
-
-                ser_num_bits <= to_unsigned(fsm.dtmcs'length, 8);
-
-              when ADDR_DMI =>
-
-                ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
-                ser_reg_in(fsm.dmi'length - 1 downto 0)                 <= fsm.dmi;
-
-                ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
-
-              when others =>
-                fsm_next.state <= st_idle;
-
-            end case;
-
-          else
-            we      <= '0';
-            ser_run <= '0';
-          end if;
+          -- ...always write when TX is ready.
+          we      <= TX_READY_I;
+          ser_run <= TX_READY_I;
         else
           -- We are done sending if our serializer is done.
           -- ToDo: Wait for DMI done signal
           fsm_next.state <= st_idle;
         end if;
 
-      when st_write =>
+        case fsm.address is
 
+          -- Dependent on address, load up the serializers register input
+          -- with the appropriate data.
+          when ADDR_IDCODE =>
+            ser_reg_in(ser_reg_in'length - 1 downto IDCODEVALUE'length) <= (others => '0');
+            ser_reg_in(IDCODEVALUE'length - 1 downto 0)                 <= IDCODEVALUE;
+            -- IDCODE Register has 32 bits.
+            ser_num_bits <= to_unsigned(32, 8);
+
+          when ADDR_DTMCS =>
+            ser_reg_in(ser_reg_in'length - 1 downto fsm.dtmcs'length) <= (others => '0');
+            ser_reg_in(fsm.dtmcs'length - 1 downto 0)                 <= fsm.dtmcs;
+
+            ser_num_bits <= to_unsigned(fsm.dtmcs'length, 8);
+
+          when ADDR_DMI =>
+
+            ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
+            ser_reg_in(fsm.dmi'length - 1 downto 0)                 <= fsm.dmi;
+
+            ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
+
+          when others =>
+            fsm_next.state <= st_idle;
+
+        end case;
+
+
+      when st_write =>
+        -- Deserialze bytes received over RX into addressed register.
+        -- De-/Serializer is active during this state.
         ser_reset <= '0';
-        -- Always read when rx-fifo is not empty and serialization not done:
+        -- If deserialzation is not done and timeout timer has not run out ...
         if (timer_overflow = '0' and ser_done = '0') then
+          -- ...always read when rx-fifo is not empty:
           if (RX_EMPTY_I = '0') then
             re      <= '1';
             ser_run <= '1';
-
-            case fsm.address is
-
-              -- Address decides into which register DREC_I is serialized into.
-              when ADDR_DTMCS =>
-                ser_num_bits   <= to_unsigned(fsm.dtmcs'length, 8);
-                fsm_next.dtmcs <= ser_reg_out(fsm.dtmcs'length - 1 downto 0);
-
-              when ADDR_DMI =>
-                dmi_write <= '1';
-                ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
-                fsm_next.dmi <= ser_reg_out(fsm.dmi'length - 1 downto 0);
-
-              when others =>
-                fsm_next.state <= st_idle;
-                ser_reset      <= '1';
-
-            end case;
-
           else
             re      <= '0';
             ser_run <= '0';
@@ -384,7 +363,27 @@ begin
           fsm_next.state <= st_idle;
         end if;
 
+        case fsm.address is
+          -- Address decides into which register DREC_I is serialized into.
+          when ADDR_DTMCS =>
+            ser_num_bits   <= to_unsigned(fsm.dtmcs'length, 8);
+            fsm_next.dtmcs <= ser_reg_out(fsm.dtmcs'length - 1 downto 0);
+
+          when ADDR_DMI =>
+            dmi_write <= '1';
+            ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
+            fsm_next.dmi <= ser_reg_out(fsm.dmi'length - 1 downto 0);
+
+          when others =>
+            fsm_next.state <= st_idle;
+            ser_reset      <= '1';
+
+        end case;
+
       when st_rw =>
+        -- Deserialze bytes received over RX into addressed register and send
+        -- addressed register seralized over TX.
+        -- De-/Serializer is active during this state.
         ser_reset <= '0';
         -- Read and write is performed simultaneously. Requires TX to be both
         -- ready to send, RX-Fifo to be not empty and serialization to be not
@@ -394,35 +393,6 @@ begin
             we      <= '1';
             re      <= '1';
             ser_run <= '1';
-
-            case fsm.address is
-
-              when ADDR_IDCODE =>
-                -- IDCODE is read-only.
-                ser_reg_in(ser_reg_in'length - 1 downto IDCODEVALUE'length) <= (others => '0');
-
-                ser_num_bits                                <= to_unsigned(32, 8);
-                ser_reg_in(IDCODEVALUE'length - 1 downto 0) <= IDCODEVALUE;
-
-              when ADDR_DTMCS =>
-                ser_reg_in(ser_reg_in'length - 1 downto fsm.dtmcs'length) <= (others => '0');
-
-                ser_num_bits                              <= to_unsigned(fsm.dtmcs'length, 8);
-                ser_reg_in(fsm.dtmcs'length - 1 downto 0) <= fsm.dtmcs;
-                fsm_next.dtmcs                            <= ser_reg_out(fsm.dtmcs'length - 1 downto 0);
-
-              when ADDR_DMI =>
-                ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
-
-                ser_num_bits                            <= to_unsigned(fsm.dmi'length, 8);
-                ser_reg_in(fsm.dmi'length - 1 downto 0) <= fsm.dmi;
-                fsm_next.dmi                            <= ser_reg_out(fsm.dmi'length - 1 downto 0);
-
-              when others =>
-                fsm_next.state <= st_idle;
-
-            end case;
-
           else
             we      <= '0';
             re      <= '0';
@@ -432,10 +402,37 @@ begin
           fsm_next.state <= st_idle;
         end if;
 
+        case fsm.address is
+
+          when ADDR_IDCODE =>
+            -- IDCODE is read-only.
+            ser_reg_in(ser_reg_in'length - 1 downto IDCODEVALUE'length) <= (others => '0');
+
+            ser_num_bits                                <= to_unsigned(32, 8);
+            ser_reg_in(IDCODEVALUE'length - 1 downto 0) <= IDCODEVALUE;
+
+          when ADDR_DTMCS =>
+            ser_reg_in(ser_reg_in'length - 1 downto fsm.dtmcs'length) <= (others => '0');
+
+            ser_num_bits                              <= to_unsigned(fsm.dtmcs'length, 8);
+            ser_reg_in(fsm.dtmcs'length - 1 downto 0) <= fsm.dtmcs;
+            fsm_next.dtmcs                            <= ser_reg_out(fsm.dtmcs'length - 1 downto 0);
+
+          when ADDR_DMI =>
+            ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
+
+            ser_num_bits                            <= to_unsigned(fsm.dmi'length, 8);
+            ser_reg_in(fsm.dmi'length - 1 downto 0) <= fsm.dmi;
+            fsm_next.dmi                            <= ser_reg_out(fsm.dmi'length - 1 downto 0);
+
+          when others =>
+            fsm_next.state <= st_idle;
+
+        end case;
+
       when st_reset =>
+        -- Reset state as the result of a reset command from host system.
         fsm_next.state   <= st_idle;
-        re               <= '0';
-        we               <= '0';
         fsm_next.address <= ADDR_IDCODE;
         -- ToDo: correct dtmcs clear value
         fsm_next.dtmcs <= (others => '0');
