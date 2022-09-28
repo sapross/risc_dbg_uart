@@ -158,8 +158,6 @@ begin
     local_dmi   <= (others => '0');
     handler_dmi <= (others => '0');
     dmi_error   <= (others => '0');
-    dmi_write   <= '0';
-    dmi_read    <= '0';
     done        <= '0';
     wait for 2 * CLK_PERIOD;
 
