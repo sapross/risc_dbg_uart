@@ -55,44 +55,6 @@ architecture TB of TB_UART_TAP is
 
   -- Simulates the behavior of the dmi_handler
 
-  procedure dmi_handler (
-    signal read_i    : in std_logic;
-    signal write_i   : in std_logic;
-    signal dmi_o     : out std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    signal dmi_i     : in std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    signal local_dmi : inout std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    signal done_o    : out std_logic
-  )
-  is
-  begin
-    if (read_i = '1' or write_i = '1') then
-
-      if (read_i = '1' and write_i = '0') then
-        dmi_o <= local_dmi;
-      elsif (read_i = '0' and write_i = '1') then
-        local_dmi <= dmi_i;
-      elsif (read_i = '1' and write_i = '1') then
-        dmi_o     <= local_dmi;
-        local_dmi <= dmi_i;
-      end if;
-
-      wait for CLK_PERIOD;
-      done_o <= '1';
-      wait for CLK_PERIOD;
-
-      while (read_i = '1' or write_i ='1') loop
-
-        wait for CLK_PERIOD;
-
-      end loop;
-
-      done_o <= '0';
-    else
-      wait for CLK_PERIOD;
-    end if;
-
-  end procedure dmi_handler;
-
   signal clk                       : std_logic;
   signal rst                       : std_logic;
 
@@ -163,14 +125,30 @@ begin
 
     while (true) loop
 
-      dmi_handler (
-          read_i    => dmi_read,
-          write_i   => dmi_write,
-          dmi_i     => tap_dmi,
-          dmi_o     => handler_dmi,
-          local_dmi => local_dmi,
-          done_o    => done
-          );
+      done <= '0';
+      if (dmi_read = '1' or dmi_write = '1') then
+        wait for CLK_PERIOD;
+        if (dmi_read = '1' and dmi_write = '0') then
+          handler_dmi <= local_dmi;
+        elsif (dmi_read = '0' and dmi_write = '1') then
+          local_dmi <= tap_dmi;
+        elsif (dmi_read = '1' and dmi_write = '1') then
+          handler_dmi     <= local_dmi;
+          local_dmi <= tap_dmi;
+        end if;
+
+        done <= '1';
+
+        while (dmi_read = '1' or dmi_write ='1') loop
+
+          wait for CLK_PERIOD;
+
+        end loop;
+
+      else
+        wait for CLK_PERIOD;
+      end if;
+
       -- wait for CLK_PERIOD;
 
     end loop;
