@@ -62,7 +62,6 @@ architecture TB of TB_UART_TAP is
   signal re                        : std_logic;
   signal tx_ready                  : std_logic;
   signal rx_empty                  : std_logic;
-  signal rx_full                   : std_logic;
   signal dsend                     : std_logic_vector(7 downto 0);
   signal drec                      : std_logic_vector(7 downto 0);
 
@@ -90,7 +89,6 @@ begin
       WE_O           => we,
       TX_READY_I     => tx_ready,
       RX_EMPTY_I     => rx_empty,
-      RX_FULL_I      => rx_full,
       DSEND_O        => dsend,
       DREC_I         => drec,
       DTMCS_SELECT_O => dtmcs_select,
@@ -164,7 +162,6 @@ begin
     drec     <= (others => '0');
     tx_ready <= '1';
     rx_empty <= '1';
-    rx_full  <= '0';
     wait for CLK_PERIOD;
     rst      <= '0';
     wait for 2 * CLK_PERIOD;

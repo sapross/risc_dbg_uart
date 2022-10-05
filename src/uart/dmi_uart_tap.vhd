@@ -38,7 +38,6 @@ entity DMI_UART_TAP is
     WE_O                  : out   std_logic;
     TX_READY_I            : in    std_logic;
     RX_EMPTY_I            : in    std_logic;
-    RX_FULL_I             : in    std_logic;
     DSEND_O               : out   std_logic_vector(7 downto 0);
     DREC_I                : in    std_logic_vector(7 downto 0);
 
@@ -236,10 +235,8 @@ begin
 
         fsm_next.dmi_wait_read  <= '0';
         fsm_next.dmi_wait_write <= '0';
-        -- Without data to read, remain in idle state.
-        if (RX_EMPTY_I = '0') then
-          fsm_next.state <= st_header;
-        end if;
+
+        fsm_next.state <= st_header;
 
       when st_header =>
         --If RX-Fifo is not empty, read and check received byte for HEADER.
