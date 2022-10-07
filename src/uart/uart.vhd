@@ -123,8 +123,16 @@ begin
       D_IN     => tx_dout
     );
 
-  TX_READY_O <= '1' when tx_full = '0' and WE_I = '0' and RST = '0' else
-                '0';
+  TX_READY : process(CLK) is
+  begin
+    if ( rising_edge(CLK)) then
+      if tx_full = '0' and WE_I = '0' and RST ='0' then
+        TX_READY_O <= '1';
+      else
+        TX_READY_O <= '0';
+      end if;
+    end if;
+  end process TX_READY;
 
   WRITE : process is
   begin
