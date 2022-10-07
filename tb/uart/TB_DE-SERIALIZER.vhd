@@ -117,7 +117,9 @@ begin
     run_0 <= '0';
     assert done = '1';
     assert reg_i = reg_o;
+    rst <= '1';
     wait for CLK_PERIOD;
+    rst <= '0';
     assert done = '0';
     -- Second run with 24 bits and break.
     run_0    <= '1';

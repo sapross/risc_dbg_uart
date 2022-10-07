@@ -28,7 +28,7 @@ use IEEE.NUMERIC_STD.all;
 entity UART_TOP is
   generic (
     CLK_RATE  : integer := 100000000;
-    BAUD_RATE : integer := 3 * 10 ** 6
+    BAUD_RATE : integer := 115200 --3 * 10 ** 6
     );
   port (
     CLK : in  std_logic;
@@ -79,18 +79,18 @@ begin
       if (RST = '1') then
         we    <= '0';
         dsend <= (others => '0');
-      -- counter <= 0;
+        counter <= 0;
       else
-        if (re = '1') then
+        -- if (re = '1') then
           we    <= '1';
-          dsend <= drec;
-        -- dsend     <= std_logic_vector(to_unsigned(counter, dsend'length));
-        -- counter <= counter + 1;
-        else
-          we    <= '0';
-          dsend <= (others => '0');
-        -- counter <= counter;
-        end if;
+          -- dsend <= drec;
+          dsend     <= std_logic_vector(to_unsigned(counter, dsend'length));
+          counter <= counter + 1;
+        -- else
+--          we    <= '0';
+--          dsend <= (others => '0');
+--          counter <= counter;
+--        end if;
       end if;
     end if;
 
