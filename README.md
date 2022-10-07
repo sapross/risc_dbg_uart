@@ -1,5 +1,3 @@
-[![Build Status](https://travis-ci.com/pulp-platform/riscv-dbg.svg?branch=master)](https://travis-ci.com/pulp-platform/riscv-dbg)
-
 # RISC-V Debug Support for PULP Cores
 
 This module is an implementation of a debug unit compliant with the [RISC-V
@@ -23,6 +21,7 @@ The following features are currently supported
 * Program buffer
 * System bus access (only `XLEN`)
 * DTM with JTAG interface
+* DTM with UART interface (WIP)
 
 These are not implemented (yet)
 
