@@ -19,55 +19,75 @@
 ----------------------------------------------------------------------------------
 
 library IEEE;
-use IEEE.STD_LOGIC_1164.all;
+  use IEEE.STD_LOGIC_1164.all;
 
--- Uncomment the following library declaration if using
--- arithmetic functions with Signed or Unsigned values
-use IEEE.NUMERIC_STD.all;
+  -- Uncomment the following library declaration if using
+  -- arithmetic functions with Signed or Unsigned values
+  use IEEE.NUMERIC_STD.all;
 
 entity UART_TOP is
   generic (
-    CLK_RATE  : integer := 100000000;
-    BAUD_RATE : integer := 115200 --3 * 10 ** 6
-    );
+    CLK_RATE  : integer := 10 ** 8;
+    BAUD_RATE : integer := 115200 -- 3 * 10 ** 6
+  );
   port (
-    CLK : in  std_logic;
-    RST : in  std_logic;
-    RXD : in  std_logic;
-    TXD : out std_logic
-    );
+    CLK       : in    std_logic;
+    RSTN      : in    std_logic;
+    RXD_DEBUG : in    std_logic;
+    TXD_DEBUG : out   std_logic
+--    RXD       : in    std_logic;
+--    TXD       : out   std_logic
+--    LED       : out   std_logic;
+--    SW        : in    std_logic
+  );
 end entity UART_TOP;
 
 architecture BEHAVIORAL of UART_TOP is
 
-  signal rx_empty              : std_logic;
-  signal rx_full               : std_logic;
-  signal re, we                : std_logic;
-  signal re_next, we_next      : std_logic;
-  signal dsend                 : std_logic_vector(7 downto 0);
-  signal dsend_next            : std_logic_vector(7 downto 0);
-  signal drec                  : std_logic_vector(7 downto 0);
-  signal tx_ready              : std_logic;
-  signal counter, counter_next : integer range 0 to 255;
+  signal rst                        : std_logic;
+  signal rx_empty                   : std_logic;
+  signal rx_full                    : std_logic;
+  signal re,      we                : std_logic;
+  signal re_next, we_next           : std_logic;
+  signal dsend                      : std_logic_vector(7 downto 0);
+  signal dsend_next                 : std_logic_vector(7 downto 0);
+  signal drec                       : std_logic_vector(7 downto 0);
+  signal tx_ready                   : std_logic;
+  signal counter, counter_next      : integer range 0 to 255;
+  signal led_sanity                 : std_logic;
+  signal sig_rxd, sig_txd           : std_logic;
 
 begin
-  UART_1 : entity work.UART
+
+  -- Nexys4 has low active buttons.
+  rst       <= not RSTN;
+--  sig_rxd   <= RXD_DEBUG when SW = '0' else
+--               RXD;
+--  TXD_DEBUG <= sig_txd when SW = '0' else
+--               '1';
+--  TXD       <= sig_txd when SW = '1' else
+--               '1';
+  sig_rxd <= RXD_DEBUG;
+  TXD_DEBUG <= sig_txd;
+  
+  UART_1 : entity work.uart
     generic map (
       CLK_RATE  => CLK_RATE,
-      BAUD_RATE => BAUD_RATE)
+      BAUD_RATE => BAUD_RATE
+    )
     port map (
       CLK        => CLK,
-      RST        => RST,
-      RE_I       => RE,
-      WE_I       => WE,
-      RX_I       => RXD,
-      TX_O       => TXD,
-      TX_READY_O => TX_READY,
-      RX_EMPTY_O => RX_EMPTY,
-      RX_FULL_O  => RX_FULL,
-      DSEND_I    => DSEND,
-      DREC_O     => DREC);
-
+      RST        => rst,
+      RE_I       => re,
+      WE_I       => we,
+      RX_I       => sig_rxd,
+      TX_O       => sig_txd,
+      TX_READY_O => tx_ready,
+      RX_EMPTY_O => rx_empty,
+      RX_FULL_O  => rx_full,
+      DSEND_I    => dsend,
+      DREC_O     => drec
+    );
 
   re <= '1' when rx_empty = '0' and tx_ready = '1' else
         '0';
@@ -76,21 +96,21 @@ begin
   begin
 
     if rising_edge(CLK) then
-      if (RST = '1') then
+      if (rst = '1') then
         we    <= '0';
         dsend <= (others => '0');
-        counter <= 0;
+      -- counter <= 0;
       else
-        -- if (re = '1') then
+        if (rx_empty='0' and tx_ready = '1') then
           we    <= '1';
-          -- dsend <= drec;
-          dsend     <= std_logic_vector(to_unsigned(counter, dsend'length));
-          counter <= counter + 1;
-        -- else
---          we    <= '0';
---          dsend <= (others => '0');
---          counter <= counter;
---        end if;
+          dsend <= drec;
+        -- dsend     <= std_logic_vector(to_unsigned(counter, dsend'length));
+        -- counter <= counter + 1;
+        else
+          we    <= '0';
+          dsend <= (others => '0');
+          -- counter <= counter;
+        end if;
       end if;
     end if;
 

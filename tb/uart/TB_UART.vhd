@@ -163,9 +163,9 @@ begin
     )
     port map (
       CLK => clk,
-      RST => rst_i,
-      RXD => rxd,
-      TXD => txd
+      RSTN => not rst_i,
+      RXD_DEBUG => rxd,
+      TXD_DEBUG => txd
     );
 
 end architecture TB;
