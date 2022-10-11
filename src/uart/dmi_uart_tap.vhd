@@ -123,10 +123,10 @@ architecture BEHAVIORAL of DMI_UART_TAP is
 
     -- Run timer only if RX-Fifo is empty and we are in an ongoing transaction.
     if (rx_empty_i = '1' and (
-        state_i = st_cmdaddr or
-        state_i = st_length or
-        state_i = st_write or
-        state_i = st_rw)) then
+                              state_i = st_cmdaddr or
+                              state_i = st_length or
+                              state_i = st_write or
+                              state_i = st_rw)) then
       return true;
     else
       return false;
@@ -239,7 +239,7 @@ begin
         fsm_next.state <= st_header;
 
       when st_header =>
-        --If RX-Fifo is not empty, read and check received byte for HEADER.
+        -- If RX-Fifo is not empty, read and check received byte for HEADER.
         if (RX_EMPTY_I = '0') then
           re <= '1';
           -- Is the byte from RX fifo equal to our header?
@@ -275,8 +275,8 @@ begin
           fsm_next.data_length <= unsigned(DREC_I);
 
           -- If we access dmi register, trigger
-          if fsm.address = ADDR_DMI then
-            fsm_next.dmi_wait_read <= '1';
+          if (fsm.address = ADDR_DMI) then
+            fsm_next.dmi_wait_read  <= '1';
             fsm_next.dmi_wait_write <= '1';
           end if;
           -- Move on to the next state determined by command.
@@ -311,29 +311,28 @@ begin
         -- De-/Serializer is active during this state.
         ser_reset <= '0';
         -- If serialization is not done...
-        if (ser_done = '0') then
-          -- and we do not need to wait for dmi...
-          if( fsm.dmi_wait_read = '0' )  then
-            -- always write to TX if ready.
-            we      <= TX_READY_I;
-            ser_run <= TX_READY_I;
+        -- and we do not need to wait for dmi...
+        if (fsm.dmi_wait_read = '1') then
+          -- If we do have to wait for dmi...
+          if (DMI_DONE_I = '0') then
+            -- ...tell dmi_handler to read...
+            fsm_next.dmi_wait_read <= '1';
+            dmi_read               <= '1';
           else
-            -- If we do have to wait for dmi...
-            if (DMI_DONE_I = '0') then
-              -- ...tell dmi_handler to read...
-              fsm_next.dmi_wait_read <= '1';
-              dmi_read <= '1';
-            else
-              --- ...otherwise we're done.
-              fsm_next.dmi_wait_read <= '0';
-              dmi_read <= '0';
-              fsm_next.dmi <= DMI_I;
-            end if;
+            --- ...otherwise we're done.
+            fsm_next.dmi_wait_read <= '0';
+            dmi_read               <= '0';
+            fsm_next.dmi           <= DMI_I;
           end if;
         else
-          -- We are done sending if our serializer is done.
-          -- ToDo: Wait for DMI done signal
-          fsm_next.state <= st_idle;
+          -- always write to TX if ready.
+          we      <= TX_READY_I;
+          ser_run <= TX_READY_I;
+          if (ser_done = '1') then
+            -- We are done sending if our serializer is done.
+            -- ToDo: Wait for DMI done signal
+            fsm_next.state <= st_idle;
+          end if;
         end if;
 
         case fsm.address is
@@ -364,7 +363,6 @@ begin
 
         end case;
 
-
       when st_write =>
         -- Deserialze bytes received over RX into addressed register.
         -- De-/Serializer is active during this state.
@@ -387,10 +385,10 @@ begin
               -- Is the dmi_handler done?
               if (DMI_DONE_I = '0') then
                 fsm_next.dmi_wait_write <= '1';
-                dmi_write <= '1';
+                dmi_write               <= '1';
               else
                 fsm_next.dmi_wait_write <= '0';
-                dmi_write <= '0';
+                dmi_write               <= '0';
               end if;
             else
               -- Either dmi write is done or we didn't need to wait for the
@@ -402,7 +400,9 @@ begin
           -- Message timeout is reached.
           fsm_next.state <= st_idle;
         end if;
+
         case fsm.address is
+
           -- Address decides into which register DREC_I is serialized into.
           when ADDR_DTMCS =>
             ser_num_bits   <= to_unsigned(fsm.dtmcs'length, 8);
@@ -427,42 +427,41 @@ begin
         -- ready to send, RX-Fifo to be not empty and serialization to be not
         -- done.
         if (timer_overflow = '0') then
-          if (ser_done = '0') then
-            -- Do we need to read from the dmi?
-            if( fsm.dmi_wait_read = '1' )  then
-              -- If we do have to wait for dmi...
-              if (DMI_DONE_I = '0') then
-                -- ...tell dmi_handler to read...
-                fsm_next.dmi_wait_read <= '1';
-                dmi_read <= '1';
-              else
-                --- ...otherwise we're done.
-                fsm_next.dmi_wait_read <= '0';
-                dmi_read <= '0';
-                fsm_next.dmi <= DMI_I;
-              end if;
+          -- Do we need to read from the dmi?
+          if (fsm.dmi_wait_read = '1') then
+            -- If we do have to wait for dmi...
+            if (DMI_DONE_I = '0') then
+              -- ...tell dmi_handler to read...
+              fsm_next.dmi_wait_read <= '1';
+              dmi_read               <= '1';
             else
-              if (TX_READY_I = '1' and RX_EMPTY_I = '0') then
-                we      <= '1';
-                re      <= '1';
-                ser_run <= '1';
-              else
-                we      <= '0';
-                re      <= '0';
-                ser_run <= '0';
-              end if;
+              --- ...otherwise we're done.
+              fsm_next.dmi_wait_read <= '0';
+              dmi_read               <= '0';
+              fsm_next.dmi           <= DMI_I;
             end if;
           else
+            if (TX_READY_I = '1' and RX_EMPTY_I = '0') then
+              we      <= '1';
+              re      <= '1';
+              ser_run <= '1';
+            else
+              we      <= '0';
+              re      <= '0';
+              ser_run <= '0';
+            end if;
+          end if;
+          if (ser_done = '1') then
             -- deserializing is done.
             -- Do we need to write to dmi?
             if (fsm.dmi_wait_write = '1') then
               -- Is the dmi_handler done?
               if (DMI_DONE_I = '0') then
                 fsm_next.dmi_wait_write <= '1';
-                dmi_write <= '1';
+                dmi_write               <= '1';
               else
                 fsm_next.dmi_wait_write <= '0';
-                dmi_write <= '0';
+                dmi_write               <= '0';
               end if;
             else
               -- Either dmi write is done or we didn't need to wait for the
