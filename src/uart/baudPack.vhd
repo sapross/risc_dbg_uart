@@ -20,8 +20,8 @@ package body baudpack is
   begin
 
     -- Goal: 16 Samples per symbol
-    if (hz > 16 * baudrate) then
-      divider := hz / (16 * baudrate);
+    if (hz > 8 * baudrate) then
+      divider := hz / (8 * baudrate);
       report "Uart divider for " &
              integer'image(hz) & "HZ, " &
              integer'image(baudrate) & " Baud: " &
@@ -70,7 +70,7 @@ package body baudpack is
     --     severity failure;
     --   return 1;
     -- end if;
-    return 16;
+    return 8;
 
   end function;
 
