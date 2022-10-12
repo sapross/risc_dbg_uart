@@ -65,7 +65,6 @@ architecture TB of TB_UART_TAP is
   signal dsend                     : std_logic_vector(7 downto 0);
   signal drec                      : std_logic_vector(7 downto 0);
 
-  signal dtmcs_select              : std_logic;
   signal dmi_reset                 : std_logic;
   signal dmi_error                 : std_logic_vector(1 downto 0);
   signal dmi_read                  : std_logic;
@@ -91,7 +90,6 @@ begin
       RX_EMPTY_I     => rx_empty,
       DSEND_O        => dsend,
       DREC_I         => drec,
-      DTMCS_SELECT_O => dtmcs_select,
       DMI_RESET_O    => dmi_reset,
       DMI_ERROR_I    => dmi_error,
       DMI_READ_O     => dmi_read,

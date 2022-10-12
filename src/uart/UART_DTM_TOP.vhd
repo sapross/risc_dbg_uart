@@ -89,7 +89,6 @@ begin
       RX_EMPTY_I     => rx_empty,
       DSEND_O        => dsend,
       DREC_I         => drec,
-      DTMCS_SELECT_O => open,
       DMI_RESET_O    => open,
       DMI_ERROR_I    => "00",
       DMI_READ_O     => open,

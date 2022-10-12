@@ -77,6 +77,11 @@ package uart_pkg is
     version => std_logic_vector(to_unsigned(1, 4))
   );
 
+  constant DMINoError : std_logic_vector( 1 downto 0 ) := "00";
+  constant DMIReserverdError : std_logic_vector( 1 downto 0 ) := "01";
+  constant DMIOPFailed : std_logic_vector( 1 downto 0 ) := "10";
+  constant DMIBusy : std_logic_vector( 1 downto 0 ) := "11";
+
   function dtmcs_to_stl (dtmcs : dtmcs_t) return std_logic_vector;
   function stl_to_dtmcs (value : std_logic_vector  ) return dtmcs_t;
   function dtmcs_assign (dtmcs :dtmcs_t; dtmcs_next :dtmcs_t) return dtmcs_t;
