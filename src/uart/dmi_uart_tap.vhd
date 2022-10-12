@@ -87,7 +87,6 @@ architecture BEHAVIORAL of DMI_UART_TAP is
   signal we               : std_logic;
   -- DMI-Interace Signals
   constant MAX_BYTES      : integer := (DMI_REQ_LENGTH + 7) / 8;
-  signal   dtmcs_select   : std_logic;
   signal   dmi_reset      : std_logic;
   signal   dmi_read       : std_logic;
   signal   dmi_write      : std_logic;
@@ -136,8 +135,6 @@ architecture BEHAVIORAL of DMI_UART_TAP is
 
 begin
 
-  -- FSM states to output
-  DTMCS_SELECT_O <= dtmcs_select;
   DMI_RESET_O    <= dmi_reset;
   DMI_READ_O     <= dmi_read;
   DMI_WRITE_O    <= dmi_write;
@@ -184,6 +181,9 @@ begin
 
   end process TIMEOUT;
 
+  -- dmistat of dtmcs is set by the dmi handler.
+  fsm.dtmcs(11 downto 10) <= DMI_ERROR_I;
+
   FSM_CORE : process (CLK) is
   begin
 
@@ -191,15 +191,18 @@ begin
       if (RST = '1') then
         -- FSM Signals
         fsm.dmi         <= (others => '0');
-        fsm.dtmcs       <= dtmcs_to_stl(DTMCS_ZERO);
+        fsm.dtmcs(31 downto 15)       <= (others => 0);
+        fsm.dtmcs(14 downto 12)       <= "001";
+        fsm.dtmcs(9 downto 4)         <= std_logic_vector(to_unsigned(ABITS, 6));
+        fsm.dtmcs(3 downto 0)         <= std_logic_vector(to_unsigned(1,4));
         fsm.state       <= st_idle;
         fsm.address     <= ADDR_IDCODE;
         fsm.cmd         <= CMD_NOP;
         fsm.data_length <= (others => '0');
       else
         fsm <= fsm_next;
-        -- Only bits 17 and 16 of dtmcs are writable. Discard the rest.
-        fsm.dtmcs(17 downto 16) <= fsm_next.dtmcs(17 downto 16);
+        -- Only bits 31 downto 12 of dtmcs are writable. Discard the rest.
+        fsm.dtmcs(fsm.dtmcs'length-1 downto 12) <= fsm_next.dtmcs(fsm.dtmcs'length - 1 downto 12);
       end if;
     end if;
 
@@ -236,7 +239,12 @@ begin
         fsm_next.dmi_wait_read  <= '0';
         fsm_next.dmi_wait_write <= '0';
 
-        fsm_next.state <= st_header;
+        -- If dmihardreset or dmireset bits of dtmcs are high, trigger reset.
+        if fsm.dtmcs(17) = '1' or fsm.dtmcs(16) = '1' then
+          fsm_next.state <= st_reset;
+        else
+          fsm_next.state <= st_header;
+        end if;
 
       when st_header =>
         -- If RX-Fifo is not empty, read and check received byte for HEADER.
@@ -506,7 +514,6 @@ begin
         -- Reset state as the result of a reset command from host system.
         fsm_next.state   <= st_idle;
         fsm_next.address <= ADDR_IDCODE;
-        -- ToDo: correct dtmcs clear value
         fsm_next.dtmcs <= (others => '0');
         fsm_next.dmi   <= (others => '0');
         -- Trigger reset for DMI module and de-/serializer.

@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-13
--- Last update: 2022-09-21
+-- Last update: 2022-10-12
 -- Platform   :
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ package uart_pkg is
     dmihardreset => (others => '0'),
     dmireset => (others => '0'),
     zero0 => (others => '0'),
-    idle => (others => '0'),
+    idle => "001",
     dmistat => (others => '0'),
     ABITS => std_logic_vector(to_unsigned(ABITS, 6)),
     version => std_logic_vector(to_unsigned(1, 4))
