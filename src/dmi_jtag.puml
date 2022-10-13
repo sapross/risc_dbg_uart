@@ -1,0 +1,23 @@
+@startuml
+[*] --> Idle
+Idle --> Read : dmi_access & \n update_dr & \n error_q = DMINoError & \n dmi.op = DTM_READ
+Idle --> Write : dmi_access & \n update_dr & \n error_q = DMINoError & \n dmi.op = DTM_WRITE
+Idle : dmi_req_valid  = 0
+
+Read --> WaitReadValid : dmi_req_ready
+Read : dmi_req_valid  = 1
+Read : if update_dr then error_dmi_busy = 1
+
+WaitReadValid --> Idle : dmi_resp_valid
+WaitReadValid : dmi_req_valid  = 0
+WaitReadValid : if dmi_resp_valid then data_d = dmi_resp.data
+WaitReadValid : if update_dr then error_dmi_busy = 1
+
+Write --> WaitWriteValid : dmi_req_ready
+Write : dmi_req_valid = 1
+Write : if update_dr then error_dmi_busy = 1
+
+WaitWriteValid --> Idle : dmi_resp_valid
+WaitWriteValid : dmi_req_valid  = 0
+WaitWriteValid : if update_dr then error_dmi_busy = 1
+@enduml
