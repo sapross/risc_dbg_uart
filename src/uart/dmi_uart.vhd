@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-26
--- Last update: 2022-10-12
+-- Last update: 2022-10-13
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -31,7 +31,6 @@ entity DMI_UART is
   port (
     CLK               : in    std_logic;
     RST               : in    std_logic;
-    TESTMODE_I        : in    std_logic;
     -- Signals towards TAP
     TAP_READ_I        : in    std_logic;
     TAP_WRITE_I       : in    std_logic;
@@ -39,13 +38,13 @@ entity DMI_UART is
     DMI_O             : out   std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     DONE_O            : out   std_logic;
     --- Ready/Valid Bus towards DM
-    DMI_READ_VALID_I  : in    std_logic;
-    DMI_READ_READY_O  : out   std_logic;
-    DMI_READ_I        : in    dmi_resp_t;
+    DMI_RESP_VALID_I  : in    std_logic;
+    DMI_RESP_READY_O  : out   std_logic;
+    DMI_RESP_I        : in    dmi_resp_t;
 
-    DMI_WRITE_VALID_O : out   std_logic;
-    DMI_WRITE_READY_I : in    std_logic;
-    DMI_WRITE_O       : out   dmi_req_t;
+    DMI_REQ_VALID_O   : out   std_logic;
+    DMI_REQ_READY_I   : in    std_logic;
+    DMI_REQ_O         : out   dmi_req_t;
 
     DMI_RST_NO        : out   std_logic
   );
@@ -55,41 +54,63 @@ architecture BEHAVIORAL of DMI_UART is
 
   type state_t is (
     st_idle,
+    st_read,
+    st_write,
+    st_read_dmi,
     st_wait_read_dmi,
+    st_write_dmi,
     st_wait_write_dmi,
---    st_wait_rw_dmi,
-    st_wait_ack,
-    st_reset
+    st_wait_ack
   );
 
   type fsm_t is record
-    dmi : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    dmi_req  : dmi_req_t;
+    dmi_resp : dmi_resp_t;
 
-    dmi_read_ready  : std_logic;
-    dmi_write_valid : std_logic;
-    state           : state_t;
+    state : state_t;
   end record fsm_t;
 
-  signal fsm, fsm_next : fsm_t;
+  signal fsm, fsm_next     : fsm_t;
+
+  signal dmi_resp_ready    : std_logic;
+  signal dmi_req_valid     : std_logic;
+  signal done              : std_logic;
+  signal dmi_error         : std_logic_vector(1 downto 0);
+  signal tap_dmi_req       : dmi_req_t;
 
 begin  -- architecture BEHAVIORAL
 
+  -- Convert DMI_I into a nicer format.
+  tap_dmi_req <= dmi_req_to_stl(DMI_I);
+
   -- Connect FSM variables to outgoing signals
-  DONE_O            <= fsm.done;
-  DMI_WRITE_O       <= stl_to_dmi_req(fsm.dmi);
-  DMI_O             <= fsm.dmi;
-  DMI_READ_READY_I  <= fsm.dmi_read_ready;
-  DMI_WRITE_VALID_I <= fsm.dmi_write_valid;
+  DMI_REQ_O       <= fsm.dmi_req;
+
+
+  DONE_O           <= done;
+  DMI_REQ_VALID_O  <= dmi_req_valid;
+  DMI_RESP_READY_O <= dmi_resp_ready;
+
+  -- Output towards tap consists of request address, response data and dmi_error.
+  DMI_O(DMI_O'Length - 1 downto DMI_RESP_LENGTH ) <= fsm.dmi_req.addr;
+  DMI_O(DMI_RESP_LENGTH - 1 downto 2)             <= fsm.dmi_resp.data;
+  DMI_O(1 downto 0)                               <= dmi_error;
+
+  -- Since TAP accesses DMI synchronously and does not proceed until the
+  -- operation is finished, the only occurable error, DMIBUSY,
+  dmi_error <= DMINOERROR;
 
   FSM_CORE : process (CLK) is
   begin
 
     if (rising_edge(CLK)) then
       if (RST = '1') then
-        fsm.state           <= st_idle;
-        fsm.dmi             <= (others => '0');
-        fsm.dmi_read_ready  <= '0';
-        fsm.dmi_write_valid <= '0';
+        fsm.state               <= st_idle;
+        fsm.dmi_req.addr        <= (others => '0');
+        fsm.dmi_req.data        <= (others => '0');
+        fsm.dmi_req.op          <= (others => '0');
+        fsm.dmi_resp.resp       <= (others => '0');
+        fsm.dmi_resp.data       <= (others => '0');
       else
         fsm <= fsm_next;
       end if;
@@ -97,18 +118,20 @@ begin  -- architecture BEHAVIORAL
 
   end process FSM_CORE;
 
-  FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, DMI_I, DMI_READ_VALID_I, DMI_READ_I, DMI_WRITE_READY_I)
+  FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, DMI_I, DMI_RESP_VALID_I, DMI_RESP_I, DMI_REQ_READY_I)
     is
   begin
 
     if (RST = '1') then
-      fsm_next.state           <= st_idle;
-      fsm_next.dmi             <= (others => '0');
-      fsm_next.dmi_read_ready  <= '0';
-      fsm_next.dmi_write_valid <= '0';
+      fsm_next.state <= st_idle;
+      dmi_resp_ready <= '0';
+      dmi_req_valid  <= '0';
     else
       -- Default keeps all variables assoc. with fsm the same.
       fsm_next <= fsm;
+      dmi_resp_ready <= '0';
+      dmi_req_valid  <= '0';
+      done <= '0';
 
       case fsm.state is
 
@@ -116,67 +139,60 @@ begin  -- architecture BEHAVIORAL
           -- Idle state.
           -- Wait for requests from TAP
           if (TAP_READ_I = '1' and TAP_WRITE_I = '0') then
-            -- Send read request to DM
-            fsm_next.dmi_read_ready <= '1';
-            fsm_next.state          <= st_wait_read_dmi;
+            fsm_next.state <= st_read;
           elsif (TAP_READ_I = '0' and TAP_WRITE_I = '1') then
-            -- Apply dmi from tap to register
-            fsm_next.dmi <= DMI_I;
-            -- Send write request to DM.
-            fsm_next.dmi_write_valid <= '1';
-            fsm_next.state           <= st_wait_write_dmi;
-          elsif (TAP_READ_I = '1' and TAP_WRITE_I = '1') then
-            -- Simultaneous reading and writing (i.e. register exchange).
-            -- Apply dmi from tap to local register.
-            fsm_next.dmi <= DMI_I;
-            -- Signal both reading and writing intent.
-            fsm_next.dmi_write_valid <= '1';
-            fsm_next.dmi_read_ready  <= '1';
-            fsm_next.state           <= st_wait_rw_dmi;
+            fsm_next.state <= st_write;
           else
             fsm_next.state <= st_idle;
           end if;
 
+        when st_read =>
+          -- DMI_O is pulled to the state of the response already.
+          fsm_next.state <= st_wait_ack;
+
+        when st_write =>
+          fsm_next.dmi_req <= tap_dmi_req;
+          if TAP_READ_I = '1' then
+            dmi_error <= DMIBUSY;
+          end if;
+          if (tap_dmi_req.op = DTM_READ) then
+            fsm_next.state         <= st_read_dmi;
+          elsif (tap_dmi_req.op = DTM_WRITE) then
+            fsm_next.dmi_req_valid <= '1';
+            fsm_next.state         <= st_write_dmi;
+          else
+            fsm_next.state <= st_wait_ack;
+          end if;
+
+        when st_read_dmi =>
+          dmi_req_valid <= '1';
+          if (DMI_REQ_READY_I = '1') then
+            fsm_next.state <= st_wait_read_dmi;
+          end if;
+
         when st_wait_read_dmi =>
           -- Wait until dmi from DM is valid.
-          if (DMI_READ_VALID_I = '1') then
-            -- Apply dmi response to dmi register.
-            fsm_next.dmi <= dmi_resp_to_stl(DMI_READ_I);
-            -- Release ready signal.
-            fsm_next.dmi_read_ready <= '0';
-            -- Mark transaction as done.
-            fsm_next.done <= '1';
+          if (DMI_RESP_VALID_I = '1') then
             -- Move into wait_ack state.
+            fsm_next.dmi_resp <= DMI_RESP_I;
             fsm_next.state <= st_wait_ack;
+          end if;
+
+        when st_write_dmi =>
+          dmi_req_valid <= '1';
+          if (DMI_REQ_READY_I = '1') then
+            fsm_next.state <= st_wait_write_dmi;
           end if;
 
         when st_wait_write_dmi =>
-          -- Wait until dmi is ready to read.
-          if (DMI_WRITE_READY_I = '1') then
-            -- Release valid signal.
-            fsm_next.dmi_write_valid <= '0';
-            -- Mark transaction as done.
-            fsm_next.done <= '1';
+          -- Wait until dmi from DM is valid.
+          if (DMI_RESP_VALID_I = '1') then
             -- Move into wait_ack state.
             fsm_next.state <= st_wait_ack;
           end if;
 
-        -- when st_wait_rw_dmi =>
-        --   -- Wait until write and read request are both done.
-        --   if (DMI_WRITE_READY_I = '1' and DMI_READ_VALID_I = '1') then
-        --     -- Lower valid ready signals
-        --     fsm_next.dmi_write_valid <= '0';
-        --     fsm_next.dmi_read_ready  <= '0';
-        --     -- Apply dmi response from tap to local regsiter.
-        --     fsm_next.dmi <= dmi_resp_to_stl(DMI_READ_I);
-
-        --     -- Signal TAP that transaction is done.
-        --     fsm_next.done <= '1';
-        --     -- Move into wati_ack state.
-        --     fsm_next.state <= st_wait_ack;
-        --   end if;
-
         when st_wait_ack =>
+            done <= '1';
           -- Wait for acknowledgement by TAP through lowering both read and
           -- write request bits.
           if (TAP_WRITE_I = '0' and TAP_READ_I = '0') then

@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-13
--- Last update: 2022-10-12
+-- Last update: 2022-10-13
 -- Platform   :
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -29,8 +29,8 @@ package uart_pkg is
   constant IRLENGTH    : integer := 5;
   constant IDCODEVALUE : std_logic_vector(31 downto 0) := X"00000001";
 
-  constant BYPASS                                                         : std_logic_vector(7 downto 0)  := (others => '0');
-  constant IDCODE                                                         : std_logic_vector(31 downto 0) := X"00000001";
+  constant BYPASS : std_logic_vector(7 downto 0)  := (others => '0');
+  constant IDCODE : std_logic_vector(31 downto 0) := X"00000001";
 
   constant HEADER : std_logic_vector( 7 downto 0) := X"01"; -- SOF in ASCII
 
@@ -40,9 +40,9 @@ package uart_pkg is
   constant CMD_RW    : std_logic_vector(7 - IRLENGTH downto 0) := "011";
   constant CMD_RESET : std_logic_vector(7 - IRLENGTH downto 0) := "100";
 
-  constant ADDR_IDCODE : std_logic_vector(IRLENGTH-1 downto 0) := "00001";
-  constant ADDR_DTMCS  : std_logic_vector(IRLENGTH-1 downto 0) := "10000";
-  constant ADDR_DMI    : std_logic_vector(IRLENGTH-1 downto 0) := "10001";
+  constant ADDR_IDCODE : std_logic_vector(IRLENGTH - 1 downto 0) := "00001";
+  constant ADDR_DTMCS  : std_logic_vector(IRLENGTH - 1 downto 0) := "10000";
+  constant ADDR_DMI    : std_logic_vector(IRLENGTH - 1 downto 0) := "10001";
 
   constant DTMCS_WRITE_MASK : std_logic_vector(31 downto 0) :=
   (
@@ -53,6 +53,7 @@ package uart_pkg is
 
   constant ABITS          : integer := 7;
   constant DMI_REQ_LENGTH : integer := 41;
+  constant DMI_RESP_LENGTH : integer := 34;
 
   type dtmcs_t is record
     zero1        : std_logic_vector(31 downto 18);
@@ -77,19 +78,21 @@ package uart_pkg is
     version => std_logic_vector(to_unsigned(1, 4))
   );
 
-  constant DMINoError : std_logic_vector( 1 downto 0 ) := "00";
-  constant DMIReserverdError : std_logic_vector( 1 downto 0 ) := "01";
-  constant DMIOPFailed : std_logic_vector( 1 downto 0 ) := "10";
-  constant DMIBusy : std_logic_vector( 1 downto 0 ) := "11";
+  constant DMINOERROR        : std_logic_vector( 1 downto 0) := "00";
+  constant DMIRESERVERDERROR : std_logic_vector( 1 downto 0) := "01";
+  constant DMIOPFAILED       : std_logic_vector( 1 downto 0) := "10";
+  constant DMIBUSY           : std_logic_vector( 1 downto 0) := "11";
 
   function dtmcs_to_stl (dtmcs : dtmcs_t) return std_logic_vector;
-  function stl_to_dtmcs (value : std_logic_vector  ) return dtmcs_t;
+
+  function stl_to_dtmcs (value : std_logic_vector) return dtmcs_t;
+
   function dtmcs_assign (dtmcs :dtmcs_t; dtmcs_next :dtmcs_t) return dtmcs_t;
 
   type dmi_req_t is record
     addr : std_logic_vector(ABITS - 1 downto 0);
-    data : std_logic_vector(31 downto 0);
     op   : std_logic_vector(1 downto 0);
+    data : std_logic_vector(31 downto 0);
   end record;
 
   function stl_to_dmi_req (value : std_logic_vector) return dmi_req_t;
@@ -142,8 +145,13 @@ package body uart_pkg is
 
   end function stl_to_dmi_req;
 
+  constant DTM_NOP   : std_logic_vector(1 downto 0) := "00";
+  constant DTM_READ  : std_logic_vector(1 downto 0) := "01";
+  constant DTM_WRITE : std_logic_vector(1 downto 0) := "10";
+
   function dtmcs_to_stl (dtmcs : dtmcs_t) return std_logic_vector is
   begin
+
     return dtmcs.zero1 &
       dtmcs.dmihardreset &
       dtmcs.dmireset &
@@ -152,9 +160,12 @@ package body uart_pkg is
       dtmcs.dmistat &
       dtmcs.ABITS &
       dtmcs.version;
+
   end function;
-  function stl_to_dtmcs (value : std_logic_vector  ) return dtmcs_t is
+
+  function stl_to_dtmcs (value : std_logic_vector) return dtmcs_t is
   begin
+
     return (
     zero1 => (others => '0'),
     dmihardreset => value(17 downto 17),
@@ -165,10 +176,12 @@ package body uart_pkg is
     ABITS => std_logic_vector(to_unsigned(ABITS, 5)),
     version => std_logic_vector(to_unsigned(1, 3))
   );
+
   end function;
 
   function dtmcs_assign (dtmcs :dtmcs_t; dtmcs_next :dtmcs_t) return dtmcs_t is
   begin
+
     return (
     zero1 => (others => '0'),
     dmihardreset => dtmcs_next.dmihardreset,
@@ -181,4 +194,5 @@ package body uart_pkg is
   );
 
   end function;
+
 end package body uart_pkg;
