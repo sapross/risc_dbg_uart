@@ -34,27 +34,24 @@ package uart_pkg is
 
   constant HEADER : std_logic_vector( 7 downto 0) := X"01"; -- SOF in ASCII
 
+  -- TAP commands.
   constant CMD_NOP   : std_logic_vector(7 - IRLENGTH downto 0) := "000";
   constant CMD_READ  : std_logic_vector(7 - IRLENGTH downto 0) := "001";
   constant CMD_WRITE : std_logic_vector(7 - IRLENGTH downto 0) := "010";
   constant CMD_RW    : std_logic_vector(7 - IRLENGTH downto 0) := "011";
   constant CMD_RESET : std_logic_vector(7 - IRLENGTH downto 0) := "100";
 
+  -- TAP addresses
   constant ADDR_IDCODE : std_logic_vector(IRLENGTH - 1 downto 0) := "00001";
   constant ADDR_DTMCS  : std_logic_vector(IRLENGTH - 1 downto 0) := "10000";
   constant ADDR_DMI    : std_logic_vector(IRLENGTH - 1 downto 0) := "10001";
 
-  constant DTMCS_WRITE_MASK : std_logic_vector(31 downto 0) :=
-  (
-    31 downto 18 => '0',
-    17 downto 16 => '1',
-    15 downto 0  => '0'
-  );
-
+  --- DMI specific parameters.
   constant ABITS          : integer := 7;
   constant DMI_REQ_LENGTH : integer := 41;
   constant DMI_RESP_LENGTH : integer := 34;
 
+  -- DTMCS register definitions.
   type dtmcs_t is record
     zero1        : std_logic_vector(31 downto 18);
     dmihardreset : std_logic_vector(17 downto 17);
@@ -65,19 +62,7 @@ package uart_pkg is
     ABITS        : std_logic_vector(9 downto 4);
     version      : std_logic_vector(3 downto 0);
   end record;
-
-  constant DTMCS_ZERO : dtmcs_t :=
-  (
-    zero1 => (others => '0'),
-    dmihardreset => (others => '0'),
-    dmireset => (others => '0'),
-    zero0 => (others => '0'),
-    idle => "001",
-    dmistat => (others => '0'),
-    ABITS => std_logic_vector(to_unsigned(ABITS, 6)),
-    version => std_logic_vector(to_unsigned(1, 4))
-  );
-
+  -- Error codes for both dmistat and dmi_resp.
   constant DMINOERROR        : std_logic_vector( 1 downto 0) := "00";
   constant DMIRESERVERDERROR : std_logic_vector( 1 downto 0) := "01";
   constant DMIOPFAILED       : std_logic_vector( 1 downto 0) := "10";
@@ -88,7 +73,14 @@ package uart_pkg is
   function stl_to_dtmcs (value : std_logic_vector) return dtmcs_t;
 
   function dtmcs_assign (dtmcs :dtmcs_t; dtmcs_next :dtmcs_t) return dtmcs_t;
+  
+  
+  constant DTM_NOP   : std_logic_vector(1 downto 0) := "00";
+  constant DTM_READ  : std_logic_vector(1 downto 0) := "01";
+  constant DTM_WRITE : std_logic_vector(1 downto 0) := "10";
 
+
+  -- DMI request and response definitions.
   type dmi_req_t is record
     addr : std_logic_vector(ABITS - 1 downto 0);
     op   : std_logic_vector(1 downto 0);
@@ -145,10 +137,7 @@ package body uart_pkg is
 
   end function stl_to_dmi_req;
 
-  constant DTM_NOP   : std_logic_vector(1 downto 0) := "00";
-  constant DTM_READ  : std_logic_vector(1 downto 0) := "01";
-  constant DTM_WRITE : std_logic_vector(1 downto 0) := "10";
-
+  
   function dtmcs_to_stl (dtmcs : dtmcs_t) return std_logic_vector is
   begin
 
