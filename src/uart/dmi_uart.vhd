@@ -81,7 +81,7 @@ architecture BEHAVIORAL of DMI_UART is
 begin  -- architecture BEHAVIORAL
 
   -- Convert DMI_I into a nicer format.
-  tap_dmi_req <= dmi_req_to_stl(DMI_I);
+  tap_dmi_req <= stl_to_dmi_req(DMI_I);
 
   -- Connect FSM variables to outgoing signals
   DMI_REQ_O       <= fsm.dmi_req;
@@ -158,7 +158,6 @@ begin  -- architecture BEHAVIORAL
           if (tap_dmi_req.op = DTM_READ) then
             fsm_next.state         <= st_read_dmi;
           elsif (tap_dmi_req.op = DTM_WRITE) then
-            fsm_next.dmi_req_valid <= '1';
             fsm_next.state         <= st_write_dmi;
           else
             fsm_next.state <= st_wait_ack;
@@ -196,11 +195,8 @@ begin  -- architecture BEHAVIORAL
           -- Wait for acknowledgement by TAP through lowering both read and
           -- write request bits.
           if (TAP_WRITE_I = '0' and TAP_READ_I = '0') then
-            fsm_next.done  <= '0';
             fsm_next.state <= st_idle;
           end if;
-
-        when st_reset =>
 
         when others =>
           fsm_next.state <= st_idle;
