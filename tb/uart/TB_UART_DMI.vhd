@@ -86,10 +86,10 @@ begin
 
     wait for 1 ps;
     dmi_dm         <= (others => '0');
-    dmi_resp_valid <= '1';
+    dmi_resp_valid <= '0';
     dmi_resp.data  <= (others => '0');
     dmi_resp.resp  <= (others => '0');
-    dmi_req_ready  <= '1';
+    dmi_req_ready  <= '0';
 
     wait for 2 * CLK_PERIOD;
 
@@ -99,8 +99,6 @@ begin
         dmi_resp       <= stl_to_dmi_resp(dmi_dm);
         dmi_resp_valid <= '1';
       else
-        dmi_resp.data       <= (others => '0');
-        dmi_resp.resp       <= (others => '0');
         dmi_resp_valid <= '0';
       end if;
 
@@ -129,7 +127,9 @@ begin
     rst       <= '0';
     wait for 2 * CLK_PERIOD;
 
-    dmi       <= (others => '1');
+    dmi(dmi'Length -1 downto 34)       <= (others => '1');
+    dmi(33 downto 32) <= DTM_READ;
+    dmi(31 downto 0) <= (others => '1');
     tap_write <= '1';
 
     while done = '0' loop

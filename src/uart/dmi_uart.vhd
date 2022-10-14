@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-26
--- Last update: 2022-10-13
+-- Last update: 2022-10-14
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -75,7 +75,6 @@ architecture BEHAVIORAL of DMI_UART is
   signal dmi_resp_ready    : std_logic;
   signal dmi_req_valid     : std_logic;
   signal done              : std_logic;
-  signal dmi_error         : std_logic_vector(1 downto 0);
   signal tap_dmi_req       : dmi_req_t;
 
 begin  -- architecture BEHAVIORAL
@@ -94,11 +93,10 @@ begin  -- architecture BEHAVIORAL
   -- Output towards tap consists of request address, response data and dmi_error.
   DMI_O(DMI_O'Length - 1 downto DMI_RESP_LENGTH ) <= fsm.dmi_req.addr;
   DMI_O(DMI_RESP_LENGTH - 1 downto 2)             <= fsm.dmi_resp.data;
-  DMI_O(1 downto 0)                               <= dmi_error;
-
   -- Since TAP accesses DMI synchronously and does not proceed until the
   -- operation is finished, the only occurable error, DMIBUSY,
-  dmi_error <= DMINOERROR;
+  DMI_O(1 downto 0)                               <= DMINOERROR;
+
 
   FSM_CORE : process (CLK) is
   begin
@@ -118,7 +116,7 @@ begin  -- architecture BEHAVIORAL
 
   end process FSM_CORE;
 
-  FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, DMI_I, DMI_RESP_VALID_I, DMI_RESP_I, DMI_REQ_READY_I)
+  FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, tap_dmi_req, DMI_RESP_VALID_I, DMI_RESP_I, DMI_REQ_READY_I)
     is
   begin
 
@@ -129,7 +127,8 @@ begin  -- architecture BEHAVIORAL
     else
       -- Default keeps all variables assoc. with fsm the same.
       fsm_next <= fsm;
-      dmi_resp_ready <= '0';
+      -- We are always ready to receive a response.
+      dmi_resp_ready <= '1';
       dmi_req_valid  <= '0';
       done <= '0';
 
@@ -152,9 +151,6 @@ begin  -- architecture BEHAVIORAL
 
         when st_write =>
           fsm_next.dmi_req <= tap_dmi_req;
-          if TAP_READ_I = '1' then
-            dmi_error <= DMIBUSY;
-          end if;
           if (tap_dmi_req.op = DTM_READ) then
             fsm_next.state         <= st_read_dmi;
           elsif (tap_dmi_req.op = DTM_WRITE) then

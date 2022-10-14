@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-13
--- Last update: 2022-10-13
+-- Last update: 2022-10-14
 -- Platform   :
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -131,7 +131,7 @@ package body uart_pkg is
   begin
 
     return (
-      addr => value(37 downto 34),
+      addr => value(40 downto 34),
       op => value(33 downto 32),
       data => value(31 downto 0));
 
