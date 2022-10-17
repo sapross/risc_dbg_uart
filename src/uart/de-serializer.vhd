@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-22
--- Last update: 2022-10-11
+-- Last update: 2022-10-17
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -90,9 +90,12 @@ begin  -- architecture BEHAVIORAL
     if (RST = '1') then
       REG_O <= (others => '0');
     else
+      if (count = 0) then
+        REG_O(REG_O'length -1 downto 8) <= (others => '0');
+        REG_O(7 downto 0) <= D_I;
+      else
         REG_O(REG_O'length -1 downto 8*(count)) <= (others => '0');
         REG_O(8 * (count + 1) - 1 downto 8 * count) <= D_I;
-      if (count /= 0) then
         REG_O(8*count -1 downto 0) <= deser(8*count -1 downto 0);
       end if;
     end if;

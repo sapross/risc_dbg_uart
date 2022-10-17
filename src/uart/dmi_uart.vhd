@@ -122,14 +122,16 @@ begin  -- architecture BEHAVIORAL
   FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, DMI_HARD_RESET_I, tap_dmi_req, DMI_RESP_VALID_I, DMI_RESP_I, DMI_REQ_READY_I)
     is
   begin
-
+    -- Default keeps all variables of fsm the same.
+    fsm_next <= fsm;
+    
     if (RST = '1') then
       fsm_next.state <= st_idle;
       dmi_resp_ready <= '0';
       dmi_req_valid  <= '0';
+      done           <= '0';
     else
-      -- Default keeps all variables assoc. with fsm the same.
-      fsm_next <= fsm;
+      
       -- We are always ready to receive a response.
       dmi_resp_ready <= '1';
       dmi_req_valid  <= '0';

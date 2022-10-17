@@ -88,67 +88,64 @@ architecture TB of TB_UART_DTM is
   signal rst                       : std_logic;
 
   signal rxd, txd                  : std_logic;
-  signal we                        : std_logic;
-  signal re                        : std_logic;
-  signal tx_ready                  : std_logic;
-  signal rx_empty                  : std_logic;
-  signal dsend                     : std_logic_vector(7 downto 0);
-  signal drec                      : std_logic_vector(7 downto 0);
 
   signal response                  : std_logic_vector(7 downto 0);
 
-  signal dmi_reset                 : std_logic;
-  signal dmi_error                 : std_logic_vector(1 downto 0);
-  signal dmi_read                  : std_logic;
-  signal dmi_write                 : std_logic;
-  signal tap_dmi                   : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal handler_dmi               : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal local_dmi                 : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal done                      : std_logic;
 
 begin
-
-  DUT_TAP : entity work.dmi_uart_tap
+  DUT: entity work.UART_DTM_TOP
     generic map (
       CLK_RATE  => CLK_RATE,
       BAUD_RATE => BAUD_RATE
-    )
+      )
     port map (
-      CLK              => clk,
-      RST              => rst,
-      RE_O             => re,
-      WE_O             => we,
-      TX_READY_I       => tx_ready,
-      RX_EMPTY_I       => rx_empty,
-      DSEND_O          => dsend,
-      DREC_I           => drec,
-      DMI_HARD_RESET_O => dmi_reset,
-      DMI_ERROR_I      => dmi_error,
-      DMI_READ_O       => dmi_read,
-      DMI_WRITE_O      => dmi_write,
-      DMI_O            => tap_dmi,
-      DMI_I            => handler_dmi,
-      DMI_DONE_I       => done
-    );
+      CLK       => CLK,
+      RSTN      => not rst,
+      RXD_DEBUG => rxd,
+      TXD_DEBUG => txd);
 
-  UART_1 : entity work.uart
-    generic map (
-      CLK_RATE  => CLK_RATE,
-      BAUD_RATE => BAUD_RATE
-    )
-    port map (
-      CLK        => clk,
-      RST        => rst,
-      RE_I       => re,
-      WE_I       => we,
-      RX_I       => rxd,
-      TX_O       => txd,
-      TX_READY_O => tx_ready,
-      RX_EMPTY_O => rx_empty,
-      RX_FULL_O  => open,
-      DSEND_I    => dsend,
-      DREC_O     => drec
-    );
+
+  -- DUT_TAP : entity work.dmi_uart_tap
+  --   generic map (
+  --     CLK_RATE  => CLK_RATE,
+  --     BAUD_RATE => BAUD_RATE
+  --   )
+  --   port map (
+  --     CLK              => clk,
+  --     RST              => rst,
+  --     RE_O             => re,
+  --     WE_O             => we,
+  --     TX_READY_I       => tx_ready,
+  --     RX_EMPTY_I       => rx_empty,
+  --     DSEND_O          => dsend,
+  --     DREC_I           => drec,
+  --     DMI_HARD_RESET_O => dmi_reset,
+  --     DMI_ERROR_I      => dmi_error,
+  --     DMI_READ_O       => dmi_read,
+  --     DMI_WRITE_O      => dmi_write,
+  --     DMI_O            => tap_dmi,
+  --     DMI_I            => handler_dmi,
+  --     DMI_DONE_I       => done
+  --   );
+
+  -- UART_1 : entity work.uart
+  --   generic map (
+  --     CLK_RATE  => CLK_RATE,
+  --     BAUD_RATE => BAUD_RATE
+  --   )
+  --   port map (
+  --     CLK        => clk,
+  --     RST        => rst,
+  --     RE_I       => re,
+  --     WE_I       => we,
+  --     RX_I       => rxd,
+  --     TX_O       => txd,
+  --     TX_READY_O => tx_ready,
+  --     RX_EMPTY_O => rx_empty,
+  --     RX_FULL_O  => open,
+  --     DSEND_I    => dsend,
+  --     DREC_O     => drec
+  --   );
 
   CLK_PROCESS : process is
   begin
@@ -160,50 +157,50 @@ begin
 
   end process CLK_PROCESS;
 
-  DMI_ECHO : process is
-  begin
+  -- DMI_ECHO : process is
+  -- begin
 
-    wait for 1 ps;
-    local_dmi   <= (others => '0');
-    handler_dmi <= (others => '0');
-    dmi_error   <= (others => '0');
-    done        <= '0';
-    wait for 2 * CLK_PERIOD;
+  --   wait for 1 ps;
+  --   local_dmi   <= (others => '0');
+  --   handler_dmi <= (others => '0');
+  --   dmi_error   <= (others => '0');
+  --   done        <= '0';
+  --   wait for 2 * CLK_PERIOD;
 
-    while (true) loop
+  --   while (true) loop
 
-      done <= '0';
+  --     done <= '0';
 
-      if (dmi_read = '1' or dmi_write = '1') then
-        wait for CLK_PERIOD;
-        if (dmi_read = '1' and dmi_write = '0') then
-          handler_dmi <= local_dmi;
-        elsif (dmi_read = '0' and dmi_write = '1') then
-          local_dmi <= tap_dmi;
-        elsif (dmi_read = '1' and dmi_write = '1') then
-          handler_dmi <= local_dmi;
-          local_dmi   <= tap_dmi;
-        end if;
+  --     if (dmi_read = '1' or dmi_write = '1') then
+  --       wait for CLK_PERIOD;
+  --       if (dmi_read = '1' and dmi_write = '0') then
+  --         handler_dmi <= local_dmi;
+  --       elsif (dmi_read = '0' and dmi_write = '1') then
+  --         local_dmi <= tap_dmi;
+  --       elsif (dmi_read = '1' and dmi_write = '1') then
+  --         handler_dmi <= local_dmi;
+  --         local_dmi   <= tap_dmi;
+  --       end if;
 
-        done <= '1';
+  --       done <= '1';
 
-        while (dmi_read = '1' or dmi_write ='1') loop
+  --       while (dmi_read = '1' or dmi_write ='1') loop
 
-          wait for CLK_PERIOD;
+  --         wait for CLK_PERIOD;
 
-        end loop;
+  --       end loop;
 
-      else
-        wait for CLK_PERIOD;
-      end if;
+  --     else
+  --       wait for CLK_PERIOD;
+  --     end if;
 
-      -- wait for CLK_PERIOD;
+  --     -- wait for CLK_PERIOD;
 
-    end loop;
+  --   end loop;
 
-    wait;
+  --   wait;
 
-  end process DMI_ECHO;
+  -- end process DMI_ECHO;
 
   MAIN : process is
   begin
