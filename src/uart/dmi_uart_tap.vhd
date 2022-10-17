@@ -19,39 +19,39 @@
 --
 
 library IEEE;
-use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
+  use ieee.std_logic_1164.all;
+  use ieee.numeric_std.all;
 
 library WORK;
-use work.uart_pkg.all;
+  use work.uart_pkg.all;
 
 entity DMI_UART_TAP is
   generic (
     CLK_RATE  : integer := 100000000;
     BAUD_RATE : integer := 3 * 10 ** 6
-    );
+  );
   port (
-    CLK                   : in    std_logic;
-    RST                   : in    std_logic;
+    CLK                        : in    std_logic;
+    RST                        : in    std_logic;
     -- UART-Interface connections
-    RE_O                  : out   std_logic;
-    WE_O                  : out   std_logic;
-    TX_READY_I            : in    std_logic;
-    RX_EMPTY_I            : in    std_logic;
-    DSEND_O               : out   std_logic_vector(7 downto 0);
-    DREC_I                : in    std_logic_vector(7 downto 0);
+    RE_O                       : out   std_logic;
+    WE_O                       : out   std_logic;
+    TX_READY_I                 : in    std_logic;
+    RX_EMPTY_I                 : in    std_logic;
+    DSEND_O                    : out   std_logic_vector(7 downto 0);
+    DREC_I                     : in    std_logic_vector(7 downto 0);
 
     -- clear error state
-    DMI_RESET_O           : out   std_logic;
-    DMI_ERROR_I           : in    std_logic_vector(1 downto 0);
+    DMI_HARD_RESET_O           : out   std_logic;
+    DMI_ERROR_I                : in    std_logic_vector(1 downto 0);
 
     -- Signals towards debug module interface
-    DMI_READ_O            : out   std_logic;
-    DMI_WRITE_O           : out   std_logic;
-    DMI_O                 : out   std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    DMI_I                 : in    std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-    DMI_DONE_I            : in    std_logic
-    );
+    DMI_READ_O                 : out   std_logic;
+    DMI_WRITE_O                : out   std_logic;
+    DMI_O                      : out   std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    DMI_I                      : in    std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    DMI_DONE_I                 : in    std_logic
+  );
 end entity DMI_UART_TAP;
 
 architecture BEHAVIORAL of DMI_UART_TAP is
@@ -65,10 +65,10 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     st_write,
     -- st_rw,
     st_reset
-    );
+  );
 
   type fsm_t is record
-    dmi   : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+    dmi : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     -- FSM Signals
     state       : state_t;
     address     : std_logic_vector(IrLength - 1 downto 0);
@@ -79,33 +79,32 @@ architecture BEHAVIORAL of DMI_UART_TAP is
     dmi_wait_write : std_logic;
   end record fsm_t;
 
-  signal dtmcs, dtmcs_next : std_logic_vector(31 downto 0);
+  signal dtmcs, dtmcs_next  : std_logic_vector(31 downto 0);
   -- UART-Interface signals
-  signal re               : std_logic;
-  signal we               : std_logic;
+  signal re                 : std_logic;
+  signal we                 : std_logic;
   -- DMI-Interace Signals
-  constant MAX_BYTES      : integer := (DMI_REQ_LENGTH + 7) / 8;
-  signal   dmi_reset      : std_logic;
-  signal   dmi_read       : std_logic;
-  signal   dmi_write      : std_logic;
+  constant MAX_BYTES        : integer := (DMI_REQ_LENGTH + 7) / 8;
+  signal   dmi_read         : std_logic;
+  signal   dmi_write        : std_logic;
 
   -- Signals for the De-/Serializer
-  signal ser_reset        : std_logic;
-  signal ser_run          : std_logic;
-  signal ser_done         : std_logic;
-  signal ser_num_bits     : unsigned(7 downto 0);
-  signal ser_data_in      : std_logic_vector(7 downto 0);
-  signal ser_reg_in       : std_logic_vector(MAX_BYTES * 8 - 1 downto 0);
-  signal ser_reg_out      : std_logic_vector(MAX_BYTES * 8 - 1 downto 0);
+  signal ser_reset          : std_logic;
+  signal ser_run            : std_logic;
+  signal ser_done           : std_logic;
+  signal ser_num_bits       : unsigned(7 downto 0);
+  signal ser_data_in        : std_logic_vector(7 downto 0);
+  signal ser_reg_in         : std_logic_vector(MAX_BYTES * 8 - 1 downto 0);
+  signal ser_reg_out        : std_logic_vector(MAX_BYTES * 8 - 1 downto 0);
   -- State machine and combinatorial next state.
-  signal fsm, fsm_next    : fsm_t;
+  signal fsm,   fsm_next    : fsm_t;
 
   -- Time Out timer to catch unfished operations.
   -- Each UART-Frame takes 10 baud periods (1 Start + 8 Data + 1 Stop)
   -- Wait for the time of 5 UART-Frames.
-  constant MSG_TIMEOUT    : integer := 5 * (10 * CLK_RATE / BAUD_RATE);
-  signal   msg_timer      : integer range 0 to MSG_TIMEOUT;
-  signal   timer_overflow : std_logic;
+  constant MSG_TIMEOUT      : integer := 5 * (10 * CLK_RATE / BAUD_RATE);
+  signal   msg_timer        : integer range 0 to MSG_TIMEOUT;
+  signal   timer_overflow   : std_logic;
   -- Number of (partial) bytes required to save largest register.
   -- Largest register is DMI, therefore ceil(DMI'length/8) bytes are
   -- necessary.
@@ -120,10 +119,10 @@ architecture BEHAVIORAL of DMI_UART_TAP is
 
     -- Run timer only if RX-Fifo is empty and we are in an ongoing transaction.
     if (rx_empty_i = '1' and (
-      state_i = st_cmdaddr or
-      state_i = st_length or
-      state_i = st_read or
-      state_i = st_write )) then
+                              state_i = st_cmdaddr or
+                              state_i = st_length or
+                              state_i = st_read or
+                              state_i = st_write)) then
       return true;
     else
       return false;
@@ -133,10 +132,10 @@ architecture BEHAVIORAL of DMI_UART_TAP is
 
 begin
 
-  DMI_RESET_O    <= dmi_reset;
-  DMI_READ_O     <= dmi_read;
-  DMI_WRITE_O    <= dmi_write;
-  DMI_O          <= fsm.dmi;
+  DMI_HARD_RESET_O <= dtmcs(17);
+  DMI_READ_O       <= dmi_read;
+  DMI_WRITE_O      <= dmi_write;
+  DMI_O            <= fsm.dmi;
 
   WE_O <= we;
   RE_O <= re;
@@ -146,7 +145,7 @@ begin
     generic map (
       -- The largest register is DMI with 41 bytes.
       MAX_BYTES => (DMI_REQ_LENGTH + 7) / 8
-      )
+    )
     port map (
       CLK => CLK,
       -- Synchronous reset may also be triggered by reset command.
@@ -158,7 +157,7 @@ begin
       REG_O      => ser_reg_out,
       RUN_I      => ser_run,
       DONE_O     => ser_done
-      );
+    );
 
   TIMEOUT : process (CLK) is
   begin
@@ -179,23 +178,24 @@ begin
 
   end process TIMEOUT;
 
-  ERROR_STATES : process( CLK ) is
+  ERROR_STATES : process (CLK) is
   begin
+
     if rising_edge(CLK) then
       if (RST = '1') then
         dtmcs( 11 downto 10 ) <= DMINoError;
       else
-        if fsm.address = ADDR_DMI and timer_overflow  ='1' then
-          if fsm.dmi_wait_read =  '1' or fsm.dmi_wait_write = '1' then
+        if (fsm.address = ADDR_DMI and timer_overflow  ='1') then
+          if (fsm.dmi_wait_read =  '1' or fsm.dmi_wait_write = '1') then
             dtmcs (11 downto 10) <= DMIBusy;
           end if;
-        elsif fsm.address = ADDR_DTMCS and fsm.state = st_write then
+        elsif (fsm.address = ADDR_DTMCS and fsm.state = st_write) then
           dtmcs( 11 downto 10  ) <= DMINoError;
         end if;
       end if;
     end if;
-  end process;
 
+  end process ERROR_STATES;
 
   FSM_CORE : process (CLK) is
   begin
@@ -203,13 +203,13 @@ begin
     if rising_edge(CLK) then
       if (RST = '1') then
         -- FSM Signals
-        fsm.dmi                       <= (others => '0');
+        fsm.dmi <= (others => '0');
 
-        dtmcs(31 downto 15)       <= (others => '0');
-        dtmcs(14 downto 12)       <= "001";
+        dtmcs(31 downto 15) <= (others => '0');
+        dtmcs(14 downto 12) <= "001";
 
-        dtmcs(9 downto 4)         <= std_logic_vector(to_unsigned(ABITS, 6));
-        dtmcs(3 downto 0)         <= std_logic_vector(to_unsigned(1,4));
+        dtmcs(9 downto 4) <= std_logic_vector(to_unsigned(ABITS, 6));
+        dtmcs(3 downto 0) <= std_logic_vector(to_unsigned(1, 4));
 
         fsm.state       <= st_idle;
         fsm.address     <= ADDR_IDCODE;
@@ -218,7 +218,7 @@ begin
       else
         fsm <= fsm_next;
         -- Only bits 31 downto 9 of dtmcs are writable. Discard the rest.
-        dtmcs(dtmcs'length-1 downto 12) <= dtmcs_next(dtmcs'length - 1 downto 12);
+        dtmcs(dtmcs'length - 1 downto 12) <= dtmcs_next(dtmcs'length - 1 downto 12);
       end if;
     end if;
 
@@ -227,15 +227,14 @@ begin
   FSM_COMB : process (fsm, DREC_I, RX_EMPTY_I, TX_READY_I, DMI_I, DMI_DONE_I, ser_done, timer_overflow) is
   begin
 
-    fsm_next <= fsm;
+    fsm_next   <= fsm;
     dtmcs_next <= dtmcs;
     -- UART-Interface signals
     re <= '0';
     we <= '0';
     -- DMI-Interace Signals
-    dmi_reset    <= '0';
-    dmi_read     <= '0';
-    dmi_write    <= '0';
+    dmi_read  <= '0';
+    dmi_write <= '0';
 
     ser_reset <= '1';
     ser_run   <= '0';
@@ -255,7 +254,7 @@ begin
         fsm_next.dmi_wait_write <= '0';
 
         -- If dmihardreset or dmireset bits of dtmcs are high, trigger reset.
-        if dtmcs(17) = '1' or dtmcs(16) = '1' then
+        if (dtmcs(17) = '1') then
           fsm_next.state <= st_reset;
         else
           fsm_next.state <= st_header;
@@ -311,8 +310,8 @@ begin
             when CMD_WRITE =>
               fsm_next.state <= st_write;
 
-            -- when CMD_RW =>
-            --   fsm_next.state <= st_rw;
+              -- when CMD_RW =>
+              --   fsm_next.state <= st_rw;
 
             when CMD_RESET =>
               fsm_next.state <= st_reset;
@@ -341,13 +340,11 @@ begin
             -- ...tell dmi_handler to read...
             fsm_next.dmi_wait_read <= '1';
             dmi_read               <= '1';
-
           else
             --- ...otherwise we're done.
             fsm_next.dmi_wait_read <= '0';
             dmi_read               <= '0';
             fsm_next.dmi           <= DMI_I;
-
           end if;
         else
           -- always write to TX if ready.
@@ -429,15 +426,19 @@ begin
 
           -- Address decides into which register DREC_I is serialized into.
           when ADDR_DTMCS =>
-            ser_num_bits   <= to_unsigned(dtmcs'length, 8);
-            if(ser_done = '1') then
+            ser_num_bits <= to_unsigned(dtmcs'length, 8);
+
+            if (ser_done = '1') then
               dtmcs_next <= ser_reg_out(dtmcs'length - 1 downto 0);
             end if;
+
           when ADDR_DMI =>
             ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
-            if(ser_done = '1') then
+
+            if (ser_done = '1') then
               fsm_next.dmi <= ser_reg_out(fsm.dmi'length - 1 downto 0);
             end if;
+
           when others =>
             fsm_next.state <= st_idle;
             ser_reset      <= '1';
@@ -532,10 +533,8 @@ begin
         -- Reset state as the result of a reset command from host system.
         fsm_next.state   <= st_idle;
         fsm_next.address <= ADDR_IDCODE;
-        dtmcs_next <= (others => '0');
-        fsm_next.dmi   <= (others => '0');
-        -- Trigger reset for DMI module and de-/serializer.
-        dmi_reset <= '1';
+        dtmcs_next       <= (others => '0');
+        fsm_next.dmi     <= (others => '0');
         -- Stop serialization.
         ser_reset <= '1';
         ser_run   <= '0';

@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-26
--- Last update: 2022-10-14
+-- Last update: 2022-10-17
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -37,6 +37,8 @@ entity DMI_UART is
     DMI_I             : in    std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     DMI_O             : out   std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
     DONE_O            : out   std_logic;
+    DMI_HARD_RESET_I  : in    std_logic;
+
     --- Ready/Valid Bus towards DM
     DMI_RESP_VALID_I  : in    std_logic;
     DMI_RESP_READY_O  : out   std_logic;
@@ -60,7 +62,8 @@ architecture BEHAVIORAL of DMI_UART is
     st_wait_read_dmi,
     st_write_dmi,
     st_wait_write_dmi,
-    st_wait_ack
+    st_wait_ack,
+    st_reset
   );
 
   type fsm_t is record
@@ -79,12 +82,13 @@ architecture BEHAVIORAL of DMI_UART is
 
 begin  -- architecture BEHAVIORAL
 
+  DMI_RST_NO <= not DMI_HARD_RESET_I;
+
   -- Convert DMI_I into a nicer format.
   tap_dmi_req <= stl_to_dmi_req(DMI_I);
 
   -- Connect FSM variables to outgoing signals
-  DMI_REQ_O       <= fsm.dmi_req;
-
+  DMI_REQ_O <= fsm.dmi_req;
 
   DONE_O           <= done;
   DMI_REQ_VALID_O  <= dmi_req_valid;
@@ -95,20 +99,19 @@ begin  -- architecture BEHAVIORAL
   DMI_O(DMI_RESP_LENGTH - 1 downto 2)             <= fsm.dmi_resp.data;
   -- Since TAP accesses DMI synchronously and does not proceed until the
   -- operation is finished, the only occurable error, DMIBUSY,
-  DMI_O(1 downto 0)                               <= DMINOERROR;
-
+  DMI_O(1 downto 0) <= DMINOERROR;
 
   FSM_CORE : process (CLK) is
   begin
 
     if (rising_edge(CLK)) then
       if (RST = '1') then
-        fsm.state               <= st_idle;
-        fsm.dmi_req.addr        <= (others => '0');
-        fsm.dmi_req.data        <= (others => '0');
-        fsm.dmi_req.op          <= (others => '0');
-        fsm.dmi_resp.resp       <= (others => '0');
-        fsm.dmi_resp.data       <= (others => '0');
+        fsm.state         <= st_idle;
+        fsm.dmi_req.addr  <= (others => '0');
+        fsm.dmi_req.data  <= (others => '0');
+        fsm.dmi_req.op    <= (others => '0');
+        fsm.dmi_resp.resp <= (others => '0');
+        fsm.dmi_resp.data <= (others => '0');
       else
         fsm <= fsm_next;
       end if;
@@ -116,7 +119,7 @@ begin  -- architecture BEHAVIORAL
 
   end process FSM_CORE;
 
-  FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, tap_dmi_req, DMI_RESP_VALID_I, DMI_RESP_I, DMI_REQ_READY_I)
+  FSM_COMB : process (RST, fsm, TAP_READ_I, TAP_WRITE_I, DMI_HARD_RESET_I, tap_dmi_req, DMI_RESP_VALID_I, DMI_RESP_I, DMI_REQ_READY_I)
     is
   begin
 
@@ -130,19 +133,23 @@ begin  -- architecture BEHAVIORAL
       -- We are always ready to receive a response.
       dmi_resp_ready <= '1';
       dmi_req_valid  <= '0';
-      done <= '0';
+      done           <= '0';
 
       case fsm.state is
 
         when st_idle =>
           -- Idle state.
           -- Wait for requests from TAP
-          if (TAP_READ_I = '1' and TAP_WRITE_I = '0') then
-            fsm_next.state <= st_read;
-          elsif (TAP_READ_I = '0' and TAP_WRITE_I = '1') then
-            fsm_next.state <= st_write;
+          if (DMI_HARD_RESET_I = '1') then
+            fsm_next.state <= st_reset;
           else
-            fsm_next.state <= st_idle;
+            if (TAP_READ_I = '1' and TAP_WRITE_I = '0') then
+              fsm_next.state <= st_read;
+            elsif (TAP_READ_I = '0' and TAP_WRITE_I = '1') then
+              fsm_next.state <= st_write;
+            else
+              fsm_next.state <= st_idle;
+            end if;
           end if;
 
         when st_read =>
@@ -152,9 +159,9 @@ begin  -- architecture BEHAVIORAL
         when st_write =>
           fsm_next.dmi_req <= tap_dmi_req;
           if (tap_dmi_req.op = DTM_READ) then
-            fsm_next.state         <= st_read_dmi;
+            fsm_next.state <= st_read_dmi;
           elsif (tap_dmi_req.op = DTM_WRITE) then
-            fsm_next.state         <= st_write_dmi;
+            fsm_next.state <= st_write_dmi;
           else
             fsm_next.state <= st_wait_ack;
           end if;
@@ -170,7 +177,7 @@ begin  -- architecture BEHAVIORAL
           if (DMI_RESP_VALID_I = '1') then
             -- Move into wait_ack state.
             fsm_next.dmi_resp <= DMI_RESP_I;
-            fsm_next.state <= st_wait_ack;
+            fsm_next.state    <= st_wait_ack;
           end if;
 
         when st_write_dmi =>
@@ -187,16 +194,23 @@ begin  -- architecture BEHAVIORAL
           end if;
 
         when st_wait_ack =>
-            done <= '1';
+          done <= '1';
           -- Wait for acknowledgement by TAP through lowering both read and
           -- write request bits.
           if (TAP_WRITE_I = '0' and TAP_READ_I = '0') then
             fsm_next.state <= st_idle;
           end if;
 
+        when st_reset =>
+          fsm_next.state <= st_idle;
+          fsm_next.dmi_req.addr  <= (others => '0');
+          fsm_next.dmi_req.data  <= (others => '0');
+          fsm_next.dmi_req.op    <= (others => '0');
+          fsm_next.dmi_resp.resp <= (others => '0');
+          fsm_next.dmi_resp.data <= (others => '0');
+
         when others =>
           fsm_next.state <= st_idle;
-
       end case;
 
     end if;

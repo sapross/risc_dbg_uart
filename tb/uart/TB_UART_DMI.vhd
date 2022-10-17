@@ -22,30 +22,31 @@ end entity TB_UART_DMI;
 
 architecture TB of TB_UART_DMI is
 
-  constant CLK_RATE                : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD              : time    := 10 ns;          -- ns;
-  constant BAUD_RATE               : integer := 3 * 10 ** 6;    -- Hz
-  constant BAUD_PERIOD             : time    := 333 ns;         -- ns;
+  constant CLK_RATE                     : integer := 100 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD                   : time    := 10 ns;          -- ns;
+  constant BAUD_RATE                    : integer := 3 * 10 ** 6;    -- Hz
+  constant BAUD_PERIOD                  : time    := 333 ns;         -- ns;
 
-  signal clk                       : std_logic;
-  signal rst                       : std_logic;
+  signal clk                            : std_logic;
+  signal rst                            : std_logic;
 
-  signal tap_read                  : std_logic;
-  signal tap_write                 : std_logic;
-  signal dmi_tap                   : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal dmi                       : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal dmi_dm                    : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal done                      : std_logic;
+  signal tap_read                       : std_logic;
+  signal tap_write                      : std_logic;
+  signal dmi_tap                        : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal dmi                            : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal dmi_dm                         : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal done                           : std_logic;
+  signal dmi_hard_reset                 : std_logic;
 
-  signal dmi_resp_valid            : std_logic;
-  signal dmi_resp_ready            : std_logic;
-  signal dmi_resp                  : dmi_resp_t;
+  signal dmi_resp_valid                 : std_logic;
+  signal dmi_resp_ready                 : std_logic;
+  signal dmi_resp                       : dmi_resp_t;
 
-  signal dmi_req_valid             : std_logic;
-  signal dmi_req_ready             : std_logic;
-  signal dmi_req                   : dmi_req_t;
+  signal dmi_req_valid                  : std_logic;
+  signal dmi_req_ready                  : std_logic;
+  signal dmi_req                        : dmi_req_t;
 
-  signal dmi_reset                 : std_logic;
+  signal dmi_reset                      : std_logic;
 
 begin
 
@@ -54,11 +55,12 @@ begin
       CLK => clk,
       RST => rst,
 
-      TAP_READ_I  => tap_read,
-      TAP_WRITE_I => tap_write,
-      DMI_I       => dmi,
-      DMI_O       => dmi_tap,
-      DONE_O      => done,
+      TAP_READ_I       => tap_read,
+      TAP_WRITE_I      => tap_write,
+      DMI_I            => dmi,
+      DMI_O            => dmi_tap,
+      DONE_O           => done,
+      DMI_HARD_RESET_I => dmi_hard_reset,
 
       DMI_RESP_VALID_I => dmi_resp_valid,
       DMI_RESP_READY_O => dmi_resp_ready,
@@ -90,7 +92,6 @@ begin
     dmi_resp.data  <= (others => '0');
     dmi_resp.resp  <= (others => '0');
     dmi_req_ready  <= '0';
-
     wait for 2 * CLK_PERIOD;
 
     while (true) loop
@@ -120,17 +121,18 @@ begin
   MAIN : process is
   begin
 
-    rst       <= '1';
-    tap_read  <= '0';
-    tap_write <= '0';
+    rst            <= '1';
+    tap_read       <= '0';
+    tap_write      <= '0';
+    dmi_hard_reset <= '0';
     wait for CLK_PERIOD;
-    rst       <= '0';
+    rst            <= '0';
     wait for 2 * CLK_PERIOD;
 
-    dmi(dmi'Length -1 downto 34)       <= (others => '1');
-    dmi(33 downto 32) <= DTM_READ;
-    dmi(31 downto 0) <= (others => '1');
-    tap_write <= '1';
+    dmi(dmi'Length - 1 downto 34) <= (others => '1');
+    dmi(33 downto 32)             <= DTM_READ;
+    dmi(31 downto 0)              <= (others => '1');
+    tap_write                     <= '1';
 
     while done = '0' loop
 
@@ -148,9 +150,12 @@ begin
 
     end loop;
 
-    dmi      <= dmi_tap;
-    tap_read <= '0';
-
+    dmi            <= dmi_tap;
+    tap_read       <= '0';
+    wait for CLK_PERIOD * 2;
+    dmi_hard_reset <= '1';
+    wait for CLK_PERIOD;
+    dmi_hard_reset <= '0';
     wait;
 
   end process MAIN;

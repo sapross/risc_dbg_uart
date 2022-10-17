@@ -41,15 +41,18 @@ architecture TB of TB_UART_TAP is
     -- report "Sending byte";
     rx_empty_i <= '0';
     drec_i     <= (others => '0');
+
     while (re_i = '0') loop
+
       wait for CLK_PERIOD;
+
     end loop;
 
     if (re_i = '1') then
       drec_i <= data;
       wait for CLK_PERIOD;
     else
-      end if;
+    end if;
 
   end procedure rec_byte;
 
@@ -82,21 +85,21 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK            => clk,
-      RST            => rst,
-      RE_O           => re,
-      WE_O           => we,
-      TX_READY_I     => tx_ready,
-      RX_EMPTY_I     => rx_empty,
-      DSEND_O        => dsend,
-      DREC_I         => drec,
-      DMI_RESET_O    => dmi_reset,
-      DMI_ERROR_I    => dmi_error,
-      DMI_READ_O     => dmi_read,
-      DMI_WRITE_O    => dmi_write,
-      DMI_O          => tap_dmi,
-      DMI_I          => handler_dmi,
-      DMI_DONE_I         => done
+      CLK              => clk,
+      RST              => rst,
+      RE_O             => re,
+      WE_O             => we,
+      TX_READY_I       => tx_ready,
+      RX_EMPTY_I       => rx_empty,
+      DSEND_O          => dsend,
+      DREC_I           => drec,
+      DMI_HARD_RESET_O => dmi_reset,
+      DMI_ERROR_I      => dmi_error,
+      DMI_READ_O       => dmi_read,
+      DMI_WRITE_O      => dmi_write,
+      DMI_O            => tap_dmi,
+      DMI_I            => handler_dmi,
+      DMI_DONE_I       => done
     );
 
   CLK_PROCESS : process is
@@ -122,6 +125,7 @@ begin
     while (true) loop
 
       done <= '0';
+
       if (dmi_read = '1' or dmi_write = '1') then
         wait for CLK_PERIOD;
         if (dmi_read = '1' and dmi_write = '0') then
@@ -129,8 +133,8 @@ begin
         elsif (dmi_read = '0' and dmi_write = '1') then
           local_dmi <= tap_dmi;
         elsif (dmi_read = '1' and dmi_write = '1') then
-          handler_dmi     <= local_dmi;
-          local_dmi <= tap_dmi;
+          handler_dmi <= local_dmi;
+          local_dmi   <= tap_dmi;
         end if;
 
         done <= '1';
@@ -152,6 +156,7 @@ begin
     wait;
 
   end process DMI_ECHO;
+
   MAIN : process is
   begin
 
@@ -318,6 +323,5 @@ begin
     wait;
 
   end process MAIN;
-
 
 end architecture TB;

@@ -28,6 +28,7 @@ architecture TB of TB_UART_DTM is
   constant BAUD_PERIOD             : time    := 333 ns;         -- ns;
 
   -- Simulates receiving a byte from UART-Interface.
+
   procedure uart_transmit (
     constant word :    std_logic_vector(7 downto 0);
     signal txd_i  : out std_logic
@@ -52,7 +53,6 @@ architecture TB of TB_UART_DTM is
     wait for BAUD_PERIOD;
 
   end procedure uart_transmit;
-
 
   procedure uart_receive (
     signal word  : out std_logic_vector(7 downto 0);
@@ -95,7 +95,7 @@ architecture TB of TB_UART_DTM is
   signal dsend                     : std_logic_vector(7 downto 0);
   signal drec                      : std_logic_vector(7 downto 0);
 
-  signal response : std_logic_vector(7 downto 0);
+  signal response                  : std_logic_vector(7 downto 0);
 
   signal dmi_reset                 : std_logic;
   signal dmi_error                 : std_logic_vector(1 downto 0);
@@ -114,21 +114,21 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK            => clk,
-      RST            => rst,
-      RE_O           => re,
-      WE_O           => we,
-      TX_READY_I     => tx_ready,
-      RX_EMPTY_I     => rx_empty,
-      DSEND_O        => dsend,
-      DREC_I         => drec,
-      DMI_RESET_O    => dmi_reset,
-      DMI_ERROR_I    => dmi_error,
-      DMI_READ_O     => dmi_read,
-      DMI_WRITE_O    => dmi_write,
-      DMI_O          => tap_dmi,
-      DMI_I          => handler_dmi,
-      DMI_DONE_I     => done
+      CLK              => clk,
+      RST              => rst,
+      RE_O             => re,
+      WE_O             => we,
+      TX_READY_I       => tx_ready,
+      RX_EMPTY_I       => rx_empty,
+      DSEND_O          => dsend,
+      DREC_I           => drec,
+      DMI_HARD_RESET_O => dmi_reset,
+      DMI_ERROR_I      => dmi_error,
+      DMI_READ_O       => dmi_read,
+      DMI_WRITE_O      => dmi_write,
+      DMI_O            => tap_dmi,
+      DMI_I            => handler_dmi,
+      DMI_DONE_I       => done
     );
 
   UART_1 : entity work.uart
@@ -208,9 +208,9 @@ begin
   MAIN : process is
   begin
 
-    rst      <= '1';
+    rst <= '1';
     wait for CLK_PERIOD;
-    rst      <= '0';
+    rst <= '0';
     rxd <= '1';
     wait for 2 * CLK_PERIOD;
 
@@ -317,8 +317,10 @@ begin
 
   RECEIVE : process is
   begin
+
     response <= (others => '0');
     wait for CLK_PERIOD * 2;
+
     while true loop
 
       uart_receive(response, txd);
@@ -328,4 +330,5 @@ begin
     wait;
 
   end process RECEIVE;
+
 end architecture TB;

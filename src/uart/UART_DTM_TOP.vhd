@@ -81,21 +81,21 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK            => CLK,
-      RST            => rst,
-      RE_O           => re,
-      WE_O           => we,
-      TX_READY_I     => tx_ready,
-      RX_EMPTY_I     => rx_empty,
-      DSEND_O        => dsend,
-      DREC_I         => drec,
-      DMI_RESET_O    => open,
-      DMI_ERROR_I    => "00",
-      DMI_READ_O     => open,
-      DMI_WRITE_O    => open,
-      DMI_O          => open,
-      DMI_I          => dmi,
-      DMI_DONE_I     => '1'
+      CLK              => CLK,
+      RST              => rst,
+      RE_O             => re,
+      WE_O             => we,
+      TX_READY_I       => tx_ready,
+      RX_EMPTY_I       => rx_empty,
+      DSEND_O          => dsend,
+      DREC_I           => drec,
+      DMI_HARD_RESET_O => open,
+      DMI_ERROR_I      => "00",
+      DMI_READ_O       => open,
+      DMI_WRITE_O      => open,
+      DMI_O            => open,
+      DMI_I            => dmi,
+      DMI_DONE_I       => '1'
     );
 
 end architecture BEHAVIORAL;
