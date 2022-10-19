@@ -41,7 +41,7 @@ architecture TB of TB_UART is
     variable seed1, seed2 : positive := 1;
     variable x            : real;
     variable delay        : integer;
-    constant JITTER       : real     := 0.25;
+    constant JITTER       : real     := 0.30;
 
   begin
 

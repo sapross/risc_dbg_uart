@@ -28,7 +28,7 @@ library WORK;
 entity UART_DTM_TOP is
   generic (
     CLK_RATE       : integer := 10 ** 8;
-    BAUD_RATE      : integer := 3 * 10 ** 6;
+    BAUD_RATE      : integer := 115200; --3 * 10 ** 6;
     DMI_ABITS      : integer := 5
   );
   port (

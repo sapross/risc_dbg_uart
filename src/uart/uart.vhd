@@ -97,12 +97,12 @@ begin
 
   URX : entity work.uart_rx
     generic map (
-      OVERSAMPLING => ovSamp(CLK_RATE)
+      OVERSAMPLING => ovSamp(CLK_RATE),
+      BDDIVIDER    => bdDiv(CLK_RATE, BAUD_RATE)
     )
     port map (
       CLK     => CLK,
       RST     => RST,
-      B_TICK  => baudtick,
       RX      => RX_I,
       RX_DONE => rx_wr,
       RX_BRK  => open,
@@ -123,31 +123,20 @@ begin
       D_IN     => tx_dout
     );
 
-  -- TX_READY : process(CLK) is
-  -- begin
-  --   if ( rising_edge(CLK)) then
-  --     if tx_full = '0' and WE_I = '0' and RST ='0' then
-  --       TX_READY_O <= '1';
-  --     else
-  --       TX_READY_O <= '0';
-  --     end if;
-  --   end if;
-  -- end process TX_READY;
-
   TX_READY_O <= '1' when tx_full = '0' else
                 '0';
 
-  WRITE : process is
+  WRITE : process (CLK) is
   begin
 
-    wait until rising_edge(CLK);
-
-    if (RST = '1') then
-      tx_wr <= '0';
-    else
-      tx_wr <= '0';
-      if (WE_I = '1') then
-        tx_wr <= '1';
+    if (rising_edge(CLK)) then
+      if (RST = '1') then
+        tx_wr <= '0';
+      else
+        tx_wr <= '0';
+        if (WE_I = '1') then
+          tx_wr <= '1';
+        end if;
       end if;
     end if;
 
