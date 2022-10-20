@@ -41,34 +41,33 @@ architecture TB of TB_UART is
     variable seed1, seed2 : positive := 1;
     variable x            : real;
     variable delay        : integer;
-    constant JITTER       : real     := 0.30;
+    constant JITTER       : real     := 0.45;
 
   begin
 
     -- Start bit.
     txd_i <= '0';
+    -- x is a random number between 0 and 1.
     uniform(seed1, seed2, x);
-    delay := integer(floor(x * 333.0 * JITTER * 10.0 ** 3));
-    wait for delay * ps;
-    wait for BAUD_PERIOD - BAUD_PERIOD * JITTER * 0.5;
+    -- delay is a random number of ns between 0 and 333*JITTER
+    delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
+    wait for BAUD_PERIOD + delay * ps;
 
     -- Serialize word into txd_i.
     for i in 0 to 7 loop
 
       txd_i <= word(i);
       uniform(seed1, seed2, x);
-      delay := integer(floor(x * 333.0 * JITTER * 10.0 ** 3));
-      wait for delay * ps;
-      wait for BAUD_PERIOD - BAUD_PERIOD * JITTER * 0.5;
+      delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
+      wait for BAUD_PERIOD + delay * ps;
 
     end loop;
 
     -- Stop bit.
     txd_i <= '1';
     uniform(seed1, seed2, x);
-    delay := integer(floor(x * 333.0 * JITTER * 10.0 ** 3));
-    wait for delay * ps;
-    wait for BAUD_PERIOD - BAUD_PERIOD * JITTER * 0.5;
+    delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
+    wait for BAUD_PERIOD + delay * ps;
 
   end procedure uart_transmit;
 
@@ -127,11 +126,12 @@ begin
     rst_i <= '0';
     wait for 10 * CLK_PERIOD;
 
-    din <= x"FA";
     wait for CLK_PERIOD;
 
     while true loop
 
+      uniform(seed1, seed2, x);
+      din   <= std_logic_vector(to_unsigned(integer(floor(x * 255.0)), 8));
       uniform(seed1, seed2, x);
       delay := integer(floor(x * 333.0 * 10.0 ** 3));
       wait for delay * ps;
@@ -162,8 +162,8 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK => clk,
-      RSTN => not rst_i,
+      CLK       => clk,
+      RSTN      => not rst_i,
       RXD_DEBUG => rxd,
       TXD_DEBUG => txd
     );
