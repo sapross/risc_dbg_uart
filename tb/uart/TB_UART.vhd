@@ -20,18 +20,20 @@ end entity TB_UART;
 
 architecture TB of TB_UART is
 
-  constant BAUD_RATE   : integer := 3 * 10 ** 6;    -- Hz
-  constant BAUD_PERIOD : time    := 333 ns;         -- ns;
-  constant CLK_RATE    : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD  : time    := 10 ns;          -- ns;
+  constant BAUD_RATE       : integer := 3 * 10 ** 6;    -- Hz
+  constant BAUD_PERIOD     : time    := 333 ns;         -- ns;
+  constant CLK_RATE        : integer := 100 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD      : time    := 10 ns;          -- ns;
 
-  signal clk           : std_logic;
-  signal rst_i         : std_logic;
+  signal clk               : std_logic;
+  signal rst_i             : std_logic;
 
-  signal rxd           : std_logic;
-  signal txd           : std_logic;
+  signal rxd               : std_logic;
+  signal txd               : std_logic;
 
-  signal din, dout     : std_logic_vector(7 downto 0);
+  signal din, dout         : std_logic_vector(7 downto 0);
+
+  constant SIM_WITH_JITTER : boolean := false;
 
   procedure uart_transmit (
     constant word :     std_logic_vector(7 downto 0);
@@ -47,27 +49,42 @@ architecture TB of TB_UART is
 
     -- Start bit.
     txd_i <= '0';
-    -- x is a random number between 0 and 1.
-    uniform(seed1, seed2, x);
-    -- delay is a random number of ns between 0 and 333*JITTER
-    delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
-    wait for BAUD_PERIOD + delay * ps;
+
+    if (SIM_WITH_JITTER) then
+      -- x is a random number between 0 and 1.
+      uniform(seed1, seed2, x);
+      -- delay is a random number of ns between 0 and 333*JITTER
+      delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
+      wait for BAUD_PERIOD + delay * ps;
+    else
+      wait for BAUD_PERIOD;
+    end if;
 
     -- Serialize word into txd_i.
     for i in 0 to 7 loop
 
       txd_i <= word(i);
-      uniform(seed1, seed2, x);
-      delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
-      wait for BAUD_PERIOD + delay * ps;
+
+      if (SIM_WITH_JITTER) then
+        uniform(seed1, seed2, x);
+        delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
+        wait for BAUD_PERIOD + delay * ps;
+      else
+        wait for BAUD_PERIOD;
+      end if;
 
     end loop;
 
     -- Stop bit.
     txd_i <= '1';
-    uniform(seed1, seed2, x);
-    delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
-    wait for BAUD_PERIOD + delay * ps;
+
+    if (SIM_WITH_JITTER) then
+      uniform(seed1, seed2, x);
+      delay := integer(floor((0.5 - x) * 333.0 * JITTER * 10.0 ** 3));
+      wait for BAUD_PERIOD + delay * ps;
+    else
+      wait for BAUD_PERIOD;
+    end if;
 
   end procedure uart_transmit;
 

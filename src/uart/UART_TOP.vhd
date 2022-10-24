@@ -20,100 +20,105 @@
 
 library IEEE;
   use IEEE.STD_LOGIC_1164.all;
-
-  -- Uncomment the following library declaration if using
-  -- arithmetic functions with Signed or Unsigned values
   use IEEE.NUMERIC_STD.all;
+  use work.baudPack.all;
 
 entity UART_TOP is
   generic (
     CLK_RATE  : integer := 10 ** 8;
-    BAUD_RATE : integer := 115200 -- 3 * 10 ** 6
+    BAUD_RATE : integer := 3 * 10 ** 6 -- 115200 
   );
   port (
     CLK       : in    std_logic;
     RSTN      : in    std_logic;
     RXD_DEBUG : in    std_logic;
     TXD_DEBUG : out   std_logic
---    RXD       : in    std_logic;
---    TXD       : out   std_logic
---    LED       : out   std_logic;
---    SW        : in    std_logic
+    --    RXD       : in    std_logic;
+    --    TXD       : out   std_logic
+    --    LED       : out   std_logic;
+    --    SW        : in    std_logic
   );
 end entity UART_TOP;
 
 architecture BEHAVIORAL of UART_TOP is
 
-  signal rst                        : std_logic;
-  signal rx_empty                   : std_logic;
-  signal rx_full                    : std_logic;
-  signal re,      we                : std_logic;
-  signal re_next, we_next           : std_logic;
-  signal dsend                      : std_logic_vector(7 downto 0);
-  signal dsend_next                 : std_logic_vector(7 downto 0);
-  signal drec                       : std_logic_vector(7 downto 0);
-  signal tx_ready                   : std_logic;
-  signal counter, counter_next      : integer range 0 to 255;
-  signal led_sanity                 : std_logic;
-  signal sig_rxd, sig_txd           : std_logic;
+  signal rst                                 : std_logic;
+  signal dsend                               : std_logic_vector(7 downto 0);
+  signal drec,    dout                       : std_logic_vector(7 downto 0);
+  signal rx_done, tx_done                    : std_logic;
+  signal tx_start                            : std_logic;
+  signal sig_rxd, sig_txd                    : std_logic;
+  signal baudtick                            : std_logic;
 
 begin
 
   -- Nexys4 has low active buttons.
-  rst       <= not RSTN;
---  sig_rxd   <= RXD_DEBUG when SW = '0' else
---               RXD;
---  TXD_DEBUG <= sig_txd when SW = '0' else
---               '1';
---  TXD       <= sig_txd when SW = '1' else
---               '1';
-  sig_rxd <= RXD_DEBUG;
+  rst <= not RSTN;
+  --  sig_rxd   <= RXD_DEBUG when SW = '0' else
+  --               RXD;
+  --  TXD_DEBUG <= sig_txd when SW = '0' else
+  --               '1';
+  --  TXD       <= sig_txd when SW = '1' else
+  --               '1';
+  sig_rxd   <= RXD_DEBUG;
   TXD_DEBUG <= sig_txd;
-  
-  UART_1 : entity work.uart
+
+  UART_RX_1 : entity work.uart_rx
     generic map (
-      CLK_RATE  => CLK_RATE,
-      BAUD_RATE => BAUD_RATE
+      OVERSAMPLING => ovSamp(CLK_RATE),
+      BDDIVIDER    => bdDiv(CLK_RATE, BAUD_RATE)
     )
     port map (
-      CLK        => CLK,
-      RST        => rst,
-      RE_I       => re,
-      WE_I       => we,
-      RX_I       => sig_rxd,
-      TX_O       => sig_txd,
-      TX_READY_O => tx_ready,
-      RX_EMPTY_O => rx_empty,
-      RX_FULL_O  => rx_full,
-      DSEND_I    => dsend,
-      DREC_O     => drec
+      CLK     => CLK,
+      RST     => rst,
+      RX_DONE => rx_done,
+      RX_BRK  => open,
+      RX      => sig_rxd,
+      DOUT    => drec
     );
 
-  re <= '1' when rx_empty = '0' and tx_ready = '1' else
-        '0';
+  BAUDGEN_1 : entity work.baudgen
+    generic map (
+      BDDIVIDER => bdDiv(CLK_RATE, BAUD_RATE)
+    )
+    port map (
+      CLK      => CLK,
+      RST      => rst,
+      BAUDTICK => baudtick
+    );
 
-  ECHO : process (CLK) is
+  UTX : entity work.uart_tx
+    generic map (
+      OVERSAMPLING => ovSamp(CLK_RATE)
+    )
+    port map (
+      CLK      => CLK,
+      RESETN   => RSTN,
+      B_TICK   => baudtick,
+      TX       => sig_txd,
+      TX_START => tx_start,
+      TX_DONE  => tx_done,
+      D_IN     => dout
+    );
+
+  TRANSMIT : process (CLK) is
   begin
 
     if rising_edge(CLK) then
       if (rst = '1') then
-        we    <= '0';
-        dsend <= (others => '0');
-      -- counter <= 0;
+        dout     <= (others => '0');
+        tx_start <= '0';
       else
-        if (rx_empty='0' and tx_ready = '1') then
-          we    <= '1';
-          dsend <= drec;
-        -- dsend     <= std_logic_vector(to_unsigned(counter, dsend'length));
-        -- counter <= counter + 1;
-        else
-          we    <= '0';
-          dsend <= (others => '0');
-          -- counter <= counter;
+        if (rx_done = '1') then
+          dout     <= drec;
+          tx_start <= '1';
+        end if;
+        if (tx_done = '1') then
+          tx_start <= '0';
         end if;
       end if;
     end if;
 
-  end process ECHO;
+  end process TRANSMIT;
 
 end architecture BEHAVIORAL;

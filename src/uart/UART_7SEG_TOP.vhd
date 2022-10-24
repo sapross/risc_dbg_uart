@@ -20,12 +20,11 @@
 
 library IEEE;
   use ieee.std_logic_1164.all;
-
-  -- Uncomment the following library declaration if using
-  -- arithmetic functions with Signed or Unsigned values
   use ieee.numeric_std.all;
 
-entity UART_TOP is
+  use work.baudPack.all;
+
+entity UART_7SEG_TOP is
   generic (
     CLK_RATE  : integer := 10 ** 8;
     BAUD_RATE : integer := 115200 -- 3 * 10 ** 6
@@ -38,15 +37,16 @@ entity UART_TOP is
     C         : out   std_logic_vector(6 downto 0);
     DP        : out   std_logic;
     AN        : out   std_logic_vector(7 downto 0);
+    LED       : out   std_logic_vector(15 downto 0);
     BTNC      : in    std_logic
   );
-end entity UART_TOP;
+end entity UART_7SEG_TOP;
 
-architecture BEHAVIORAL of UART_TOP is
+architecture BEHAVIORAL of UART_7SEG_TOP is
 
   signal rst                        : std_logic;
-  signal rx_empty                   : std_logic;
-  signal rx_full                    : std_logic;
+  signal rx_done                    : std_logic;
+  signal rx_brk                     : std_logic;
   signal re,      we                : std_logic;
   signal re_next, we_next           : std_logic;
   signal dsend                      : std_logic_vector(7 downto 0);
@@ -58,7 +58,7 @@ architecture BEHAVIORAL of UART_TOP is
   signal sig_rxd, sig_txd           : std_logic;
 
   signal btn,     btn_prev          : std_logic;
-  signal outbuf                     : std_logic_vector(7 downto 0);
+  signal outbuf                     : std_logic_vector(31 downto 0);
 
 begin
 
@@ -70,75 +70,84 @@ begin
   --               '1';
   --  TXD       <= sig_txd when SW = '1' else
   --               '1';
-  sig_rxd   <= RXD_DEBUG;
-  TXD_DEBUG <= sig_txd;
 
-  UART_1 : entity work.uart
+  UART_RX_1: entity work.UART_RX
     generic map (
-      CLK_RATE  => CLK_RATE,
-      BAUD_RATE => BAUD_RATE
-    )
+      OVERSAMPLING => ovSamp(CLK_RATE),
+      BDDIVIDER    => bdDiv(CLK_RATE, BAUD_RATE)
+      )
     port map (
-      CLK        => CLK,
-      RST        => rst,
-      RE_I       => re,
-      WE_I       => we,
-      RX_I       => sig_rxd,
-      TX_O       => sig_txd,
-      TX_READY_O => tx_ready,
-      RX_EMPTY_O => rx_empty,
-      RX_FULL_O  => rx_full,
-      DSEND_I    => dsend,
-      DREC_O     => drec
-    );
+      CLK     => CLK,
+      RST     => rst,
+      RX_DONE => rx_done,
+      RX_BRK  => rx_brk,
+      RX      => RXD_DEBUG,
+      DOUT    => drec);
 
-  DEBOUNCER_1 : entity work.debouncer
-    generic map (
-      TIMEOUT_CYCLES => 100
-    )
-    port map (
-      CLK    => CLK,
-      RST    => rst,
-      INPUT  => BTNC,
-      OUTPUT => btn
-    );
+  LED(15 downto 2) <= (others => '0');
+  LED(1 downto 0)  <= rx_brk & rx_done;
 
-  ENABLE_SEND : process (CLK) is
+  shift : process(CLK) is
   begin
-
-    if rising_edge(CLK) then
-      if (rst = '1') then
-        we     <= '0';
-        re     <= '0';
-        dsend  <= (others => '0');
-        outbuf <= (others => '0');
+    if (rising_edge(CLK)) then
+      if (RST = '1') then
+        outbuf <= (others =>'0');
       else
-        btn_prev <= btn;
-        if (btn_prev = '0' and btn = '1') then
-          if (rx_empty = '0') then
-            re <= '1';
-          end if;
-        else
-          re <= '0';
-        end if;
-
-        if (re = '1' and tx_ready = '1') then
-          we     <= '1';
-          dsend  <= drec;
-          outbuf <= drec;
-        else
-          we    <= '0';
-          dsend <= (others => '0');
+        if (rx_done = '1') then
+          outbuf <= outbuf(23 downto 0 ) & drec;
         end if;
       end if;
     end if;
+  end process;
 
-  end process ENABLE_SEND;
+
+  -- DEBOUNCER_1 : entity work.debouncer
+  --   generic map (
+  --     TIMEOUT_CYCLES => 100
+  --   )
+  --   port map (
+  --     CLK    => CLK,
+  --     RST    => rst,
+  --     INPUT  => BTNC,
+  --     OUTPUT => btn
+  --   );
+
+  -- ENABLE_SEND : process (CLK) is
+  -- begin
+
+  --   if rising_edge(CLK) then
+  --     if (rst = '1') then
+  --       we     <= '0';
+  --       re     <= '0';
+  --       dsend  <= (others => '0');
+  --       outbuf <= (others => '0');
+  --     else
+  --       btn_prev <= btn;
+  --       if (btn_prev = '0' and btn = '1') then
+  --         if (rx_done = '0') then
+  --           re <= '1';
+  --         end if;
+  --       else
+  --         re <= '0';
+  --       end if;
+
+  --       if (re = '1' and tx_ready = '1') then
+  --         we     <= '1';
+  --         dsend  <= drec;
+  --         outbuf <= drec;
+  --       else
+  --         we    <= '0';
+  --         dsend <= (others => '0');
+  --       end if;
+  --     end if;
+  --   end if;
+
+  -- end process ENABLE_SEND;
 
   SEGSEVEN : process (CLK) is
 
     variable digit   : std_logic_vector(3 downto 0);
-    variable sel     : std_logic;
+    variable sel     : integer range 0 to 7;
     variable counter : integer range 0 to 100000;
 
   begin
@@ -147,7 +156,7 @@ begin
       if (rst = '1') then
         counter := 0;
         digit   := (others => '0');
-        sel     := '0';
+        sel     := 0;
         AN      <= (others => '0');
         C       <= (others => '1');
         DP      <= '1';
@@ -156,13 +165,9 @@ begin
           counter := counter + 1;
         else
           counter := 0;
-          if (sel = '0') then
-            digit := outbuf(3 downto 0);
-            AN    <= "11111110";
-          else
-            digit := outbuf(7 downto 4);
-            AN    <= "11111101";
-          end if;
+          digit := outbuf((sel+1)*4 -1 downto sel*4);
+          AN    <= "11111111";
+          AN(sel) <= '0';
 
           case digit is
 
@@ -218,8 +223,7 @@ begin
               C <= "1111111";
 
           end case;
-
-          sel := not sel;
+          sel := (sel + 1) mod 8;
         end if;
       end if;
     end if;

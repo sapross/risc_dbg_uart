@@ -44,6 +44,8 @@ architecture BEHAVIORAL of UART_RX is
 
   type state_t is (st_idle, st_start, st_bit0, st_bit1, st_bit2, st_bit3, st_bit4, st_bit5, st_bit6, st_bit7, st_stop);
 
+  signal rx_q                                                   : std_logic_vector(2 downto 0);
+  signal rxd,          rxd_prev                                 : std_logic;
   signal state,        state_next                               : state_t;
 
   signal data                                                   : std_logic_vector( 7 downto 0);
@@ -55,11 +57,28 @@ architecture BEHAVIORAL of UART_RX is
   signal rx_r                                                   : std_logic;
 
   constant MAX_BAUD_COUNT                                       : integer := 3 * OVERSAMPLING * BDDIVIDER / 2;
-  constant SMPL_INTERVAL                                : integer := OVERSAMPLING * BDDIVIDER;
+  constant SMPL_INTERVAL                                        : integer := OVERSAMPLING * BDDIVIDER;
   signal   baudtick                                             : std_logic;
   signal   baud_count, baud_interval                            : integer range 0 to MAX_BAUD_COUNT - 1;
 
 begin
+
+  REGISTER_RX : process (CLK) is
+  begin
+
+    if (rising_edge(CLK)) then
+      if (RST = '1') then
+        rx_q     <= (others => '1');
+        rxd      <= '1';
+        rxd_prev <= '1';
+      else
+        rx_q     <= RX & rx_q(rx_q'length - 1 downto 1);
+        rxd      <= rx_q(0);
+        rxd_prev <= rxd;
+      end if;
+    end if;
+
+  end process REGISTER_RX;
 
   CLOCK_RECOVERY : process (CLK) is
   begin
@@ -83,7 +102,7 @@ begin
 
         -- Clock recovery/correction
         -- If a edge is found in RX:
-        if (rx_r /= RX) then
+        if (rxd /= rxd_prev) then
           baud_interval <= baud_interval - (OVERSAMPLING * BDDIVIDER / 2 - baud_count);
         end if;
       end if;
@@ -109,17 +128,8 @@ begin
 
   end process FSM_CORE;
 
-  -- rx delay
-  RX_DELAY : process is
-  begin
-
-    wait until rising_edge(CLK);
-    rx_r <= RX;
-
-  end process RX_DELAY;
-
   -- fsm logic
-  FSM_LOGIC : process (state, baudtick, data, RX, rx_r) is
+  FSM_LOGIC : process (state, baudtick, data, rxd, rxd_prev) is
   begin
 
     -- defaults
@@ -134,7 +144,7 @@ begin
       when st_idle =>
         valid <= '0';
         -- wait for falling edge
-        if (RX = '0' and rx_r = '1') then
+        if (rxd = '0' and rxd_prev = '1') then
           state_next <= st_start;
         end if;
 
@@ -150,7 +160,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit1;
-          data_next(0) <= rx_r;
+          data_next(0) <= rxd;
         end if;
 
       when st_bit1 =>
@@ -158,7 +168,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit2;
-          data_next(1) <= rx_r;
+          data_next(1) <= rxd;
         end if;
 
       when st_bit2 =>
@@ -166,7 +176,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit3;
-          data_next(2) <= rx_r;
+          data_next(2) <= rxd;
         end if;
 
       when st_bit3 =>
@@ -174,7 +184,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit4;
-          data_next(3) <= rx_r;
+          data_next(3) <= rxd;
         end if;
 
       when st_bit4 =>
@@ -182,7 +192,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit5;
-          data_next(4) <= rx_r;
+          data_next(4) <= rxd;
         end if;
 
       when st_bit5 =>
@@ -190,7 +200,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit6;
-          data_next(5) <= rx_r;
+          data_next(5) <= rxd;
         end if;
 
       when st_bit6 =>
@@ -198,7 +208,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_bit7;
-          data_next(6) <= rx_r;
+          data_next(6) <= rxd;
         end if;
 
       when st_bit7 =>
@@ -206,7 +216,7 @@ begin
 
         if (baudtick = '1') then
           state_next   <= st_stop;
-          data_next(7) <= rx_r;
+          data_next(7) <= rxd;
         end if;
 
       when st_stop =>
@@ -215,7 +225,7 @@ begin
           -- if (i = OVERSAMPLING - 1) then
           state_next <= st_idle;
           valid      <= '1';
-          -- if (rx_r = '1') then
+          -- if (rxd = '1') then
           -- else
           --   brk <= '1';
           -- end if;
