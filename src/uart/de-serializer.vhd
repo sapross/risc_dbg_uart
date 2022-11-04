@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-22
--- Last update: 2022-10-17
+-- Last update: 2022-11-04
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ begin  -- architecture BEHAVIORAL
       else
         -- Are we done serializing?
         if (RUN_I = '1') then
-          if (to_unsigned(8 * (count + 1), NUM_BITS_I'length) < NUM_BITS_I) then
+          if (to_unsigned(8 * (count), NUM_BITS_I'length) < NUM_BITS_I) then
             count <= count + 1;
           end if;
         end if;
@@ -75,7 +75,7 @@ begin  -- architecture BEHAVIORAL
   DONE_PROC : process (RST, count, NUM_BITS_I) is
   begin
 
-    if (to_unsigned(8 * (count + 1), NUM_BITS_I'length) < NUM_BITS_I or RST = '1') then
+    if (to_unsigned(8 * (count), NUM_BITS_I'length) < NUM_BITS_I or RST = '1') then
       DONE_O <= '0';
     else
       DONE_O <= '1';
@@ -101,7 +101,7 @@ begin  -- architecture BEHAVIORAL
     end if;
   end process REG_OUTPUT;
 
-  --Deserialize D_O into deser.
+  --Deserialize D_I into deser.
   DESERIALIZE: process (CLK) is
   begin
 

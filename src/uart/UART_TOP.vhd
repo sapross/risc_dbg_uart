@@ -25,14 +25,16 @@ library IEEE;
 
 entity UART_TOP is
   generic (
-    CLK_RATE  : integer := 10 ** 8;
+    CLK_RATE  : integer := 25 * 10**6; --10 ** 8;
     BAUD_RATE : integer := 3 * 10 ** 6 -- 115200 
   );
   port (
     CLK       : in    std_logic;
+    pll_locked: out std_logic;
     RSTN      : in    std_logic;
     RXD_DEBUG : in    std_logic;
     TXD_DEBUG : out   std_logic
+    
     --    RXD       : in    std_logic;
     --    TXD       : out   std_logic
     --    LED       : out   std_logic;
@@ -42,6 +44,7 @@ end entity UART_TOP;
 
 architecture BEHAVIORAL of UART_TOP is
 
+  signal sys_clk : std_logic;
   signal rst                                 : std_logic;
   signal dsend                               : std_logic_vector(7 downto 0);
   signal drec,    dout                       : std_logic_vector(7 downto 0);
@@ -54,6 +57,15 @@ begin
 
   -- Nexys4 has low active buttons.
   rst <= not RSTN;
+  
+  CLK_WIZ_I : entity work.clk_wiz_0
+    port map (
+      CLK_IN1  => CLK,
+      CLK_OUT1 => sys_clk,
+      locked => pll_locked
+    );
+
+  
   --  sig_rxd   <= RXD_DEBUG when SW = '0' else
   --               RXD;
   --  TXD_DEBUG <= sig_txd when SW = '0' else
@@ -69,7 +81,7 @@ begin
       BDDIVIDER    => bdDiv(CLK_RATE, BAUD_RATE)
     )
     port map (
-      CLK     => CLK,
+      CLK     => sys_clk,
       RST     => rst,
       RX_DONE => rx_done,
       RX_BRK  => open,
@@ -82,7 +94,7 @@ begin
       BDDIVIDER => bdDiv(CLK_RATE, BAUD_RATE)
     )
     port map (
-      CLK      => CLK,
+      CLK      => sys_clk,
       RST      => rst,
       BAUDTICK => baudtick
     );
@@ -92,7 +104,7 @@ begin
       OVERSAMPLING => ovSamp(CLK_RATE)
     )
     port map (
-      CLK      => CLK,
+      CLK      => sys_clk,
       RESETN   => RSTN,
       B_TICK   => baudtick,
       TX       => sig_txd,
@@ -101,10 +113,10 @@ begin
       D_IN     => dout
     );
 
-  TRANSMIT : process (CLK) is
+  TRANSMIT : process (sys_clk) is
   begin
 
-    if rising_edge(CLK) then
+    if rising_edge(sys_clk) then
       if (rst = '1') then
         dout     <= (others => '0');
         tx_start <= '0';

@@ -22,8 +22,8 @@ architecture TB of TB_UART is
 
   constant BAUD_RATE       : integer := 3 * 10 ** 6;    -- Hz
   constant BAUD_PERIOD     : time    := 333 ns;         -- ns;
-  constant CLK_RATE        : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD      : time    := 10 ns;          -- ns;
+  constant CLK_RATE        : integer := 25 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD      : time    := 40 ns;          -- ns;
 
   signal clk               : std_logic;
   signal rst_i             : std_logic;

@@ -21,37 +21,49 @@ entity TB_UART_DTM is
 end entity TB_UART_DTM;
 
 architecture TB of TB_UART_DTM is
-
-  constant CLK_RATE                : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD              : time    := 10 ns;          -- ns;
+  constant SYS_CLK_RATE            : integer := 100 * 10 **6; --Hz
+  constant SYS_CLK_PERIOD          : time    := 10 ns;
+  constant CLK_RATE                : integer := 25 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD              : time    := 40 ns;          -- ns;
   constant BAUD_RATE               : integer := 3 * 10 ** 6;    -- Hz
   constant BAUD_PERIOD             : time    := 333 ns;         -- ns;
 
   -- Simulates receiving a byte from UART-Interface.
 
   procedure uart_transmit (
-    constant word :    std_logic_vector(7 downto 0);
+    constant word :    std_logic_vector;
     signal txd_i  : out std_logic
   ) is
-
+    variable word_d : std_logic_vector(word'length -1 downto 0) := word;
+    variable byte : std_logic_vector(7 downto 0);
   begin
 
-    -- Start bit.
-    txd_i <= '0';
-    wait for BAUD_PERIOD;
+    -- 0 to ceil(word'length / 8) -1
+    for i in 0 to (word'length + 7)/8 -1  loop
+      if (i+1)*8 > word'length then
+        byte(7 downto word'length mod 8) := (others => '0');
+        byte(word'length mod 8  -1 downto 0) := word_d(word'length -1 downto 8*(i));
+      else
+        byte := word_d(8*(i+1)-1 downto (8*i));
+      end if;
 
-    -- Serialize word into txd_i.
-    for i in 0 to 7 loop
+      -- Start bit.
+      txd_i <= '0';
+      wait for BAUD_PERIOD;
 
-      txd_i <= word(i);
+      -- Serialize word into txd_i.
+      for i in 0 to 7 loop
+
+        txd_i <= byte(i);
+        wait for BAUD_PERIOD;
+
+      end loop;
+
+      -- Stop bit.
+      txd_i <= '1';
       wait for BAUD_PERIOD;
 
     end loop;
-
-    -- Stop bit.
-    txd_i <= '1';
-    wait for BAUD_PERIOD;
-
   end procedure uart_transmit;
 
   procedure uart_receive (
@@ -63,7 +75,7 @@ architecture TB of TB_UART_DTM is
     -- Wait until start bit is received.
     while rxd_i = '1' loop
 
-      wait for CLK_PERIOD;
+      wait for SYS_CLK_PERIOD;
 
     end loop;
 
@@ -88,7 +100,6 @@ architecture TB of TB_UART_DTM is
   signal rst                       : std_logic;
 
   signal rxd, txd                  : std_logic;
-
   signal response                  : std_logic_vector(7 downto 0);
 
 
@@ -151,9 +162,9 @@ begin
   begin
 
     clk <= '0';
-    wait for CLK_PERIOD / 2;
+    wait for SYS_CLK_PERIOD / 2;
     clk <= '1';
-    wait for CLK_PERIOD / 2;
+    wait for SYS_CLK_PERIOD / 2;
 
   end process CLK_PROCESS;
 
@@ -206,36 +217,55 @@ begin
   begin
 
     rst <= '1';
-    wait for CLK_PERIOD;
-    rst <= '0';
     rxd <= '1';
-    wait for 2 * CLK_PERIOD;
+    wait for 30*CLK_PERIOD;
+    rst <= '0';
+    wait for 2 * SYS_CLK_PERIOD;
 
     -- Testing Read from IDCODE
-    uart_transmit (
-        word       => HEADER,
-        txd_i     => rxd);
-    uart_transmit (
-        word       => CMD_READ & ADDR_IDCODE,
-        txd_i     => rxd);
-    -- Length of IDCODE register is 4 bytes.
-    uart_transmit (
-        word       => std_logic_vector(to_unsigned(4,8)),
-        txd_i     => rxd);
+    -- report "Read from IDCODE";
+    -- uart_transmit (
+    --     word       => HEADER,
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => CMD_READ & ADDR_IDCODE,
+    --     txd_i     => rxd);
+    -- -- Length of IDCODE register is 4 bytes.
+    -- uart_transmit (
+    --     word       => std_logic_vector(to_unsigned(4,8)),
+    --     txd_i     => rxd);
 
-    -- Testing Read from dtmcs
-    uart_transmit (
-        word       => HEADER,
-        txd_i     => rxd);
-    uart_transmit (
-        word       => CMD_READ & ADDR_DTMCS,
-        txd_i     => rxd);
-    -- Length of DTMCS register is 4 bytes.
-    uart_transmit (
-        word       => std_logic_vector(to_unsigned(4,8)),
-        txd_i     => rxd);
+    -- report "Read from DTMCS";
+    -- -- Testing Read from dtmcs
+    -- uart_transmit (
+    --     word       => HEADER,
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => CMD_READ & ADDR_DTMCS,
+    --     txd_i     => rxd);
+    -- -- Length of DTMCS register is 4 bytes.
+    -- uart_transmit (
+    --     word       => std_logic_vector(to_unsigned(4,8)),
+    --     txd_i     => rxd);
 
+    report "Write DMI write request";
     -- Testing write to dmi
+    uart_transmit (
+        word       => HEADER,
+        txd_i     => rxd);
+    uart_transmit (
+        word       => CMD_WRITE & ADDR_DMI,
+        txd_i     => rxd);
+    -- Length of a dmi request is 41 bits -> 6 byte.
+    uart_transmit (
+        word       => std_logic_vector(to_unsigned(6,8)),
+        txd_i     => rxd);
+    uart_transmit (
+                    -- 7b addr  &   OP      &    data
+        word       => "1111111" & DTM_WRITE & X"12345678"  ,
+        txd_i     => rxd);
+
+    report "Write DMI read request";
     uart_transmit (
         word       => HEADER,
         txd_i     => rxd);
@@ -248,25 +278,12 @@ begin
         txd_i     => rxd);
 
     uart_transmit (
-        word       => X"12",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"34",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"56",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"78",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"9A",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"BC",
+                    -- 7b addr  &   OP      &    data
+        word       => "1111111" & DTM_READ & X"00000000"  ,
         txd_i     => rxd);
 
     -- Testing read from dmi
+    report "Read from DMI";
     uart_transmit (
         word       => HEADER,
         txd_i     => rxd);
@@ -278,36 +295,36 @@ begin
         word       => std_logic_vector(to_unsigned(5,8)),
         txd_i     => rxd);
 
-    -- Testing rw to dmi
-    uart_transmit (
-        word       => HEADER,
-        txd_i     => rxd);
-    uart_transmit (
-        word       => CMD_RW & ADDR_DMI,
-        txd_i     => rxd);
-    -- Length of a dmi request is 41 bits -> 6 byte.
-    uart_transmit (
-        word       => std_logic_vector(to_unsigned(6,8)),
-        txd_i     => rxd);
+    -- -- Testing rw to dmi
+    -- uart_transmit (
+    --     word       => HEADER,
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => CMD_RW & ADDR_DMI,
+    --     txd_i     => rxd);
+    -- -- Length of a dmi request is 41 bits -> 6 byte.
+    -- uart_transmit (
+    --     word       => std_logic_vector(to_unsigned(6,8)),
+    --     txd_i     => rxd);
 
-    uart_transmit (
-        word       => X"BC",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"9A",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"78",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"56",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"34",
-        txd_i     => rxd);
-    uart_transmit (
-        word       => X"12",
-        txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => X"BC",
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => X"9A",
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => X"78",
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => X"56",
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => X"34",
+    --     txd_i     => rxd);
+    -- uart_transmit (
+    --     word       => X"12",
+    --     txd_i     => rxd);
     wait;
 
   end process MAIN;

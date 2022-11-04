@@ -27,20 +27,27 @@ library WORK;
 
 entity UART_DTM_TOP is
   generic (
-    CLK_RATE       : integer := 10 ** 8;
-    BAUD_RATE      : integer := 115200; --3 * 10 ** 6;
+    CLK_RATE       : integer := 25 * 10 ** 6;
+    BAUD_RATE      : integer := 115200; -- 3 * 10 ** 6;
     DMI_ABITS      : integer := 5
   );
   port (
     CLK              : in    std_logic;
+    -- PLL_LOCKED       : out   std_logic;
     RSTN             : in    std_logic;
     RXD_DEBUG        : in    std_logic;
-    TXD_DEBUG        : out   std_logic
+    TXD_DEBUG        : out   std_logic;
+    C                : out   std_logic_vector(6 downto 0);
+    DP               : out   std_logic;
+    AN               : out   std_logic_vector(7 downto 0);
+    LED              : out   std_logic_vector(15 downto 0)
   );
 end entity UART_DTM_TOP;
 
 architecture BEHAVIORAL of UART_DTM_TOP is
 
+  signal sys_clk                                    : std_logic;
+  signal pll_locked_i                               : std_logic;
   signal rx_empty                                   : std_logic;
   signal rx_full                                    : std_logic;
   signal re,      we                                : std_logic;
@@ -48,6 +55,7 @@ architecture BEHAVIORAL of UART_DTM_TOP is
   signal drec                                       : std_logic_vector(7 downto 0);
   signal tx_ready                                   : std_logic;
   signal dmi_tap, dmi_dm                            : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal dmi                                        : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
   signal rst                                        : std_logic;
 
   signal dmi_hard_reset                             : std_logic;
@@ -67,7 +75,15 @@ architecture BEHAVIORAL of UART_DTM_TOP is
 
 begin
 
-  rst <= not RSTN;
+  -- PLL_LOCKED <= pll_locked_i;
+  rst        <= not RSTN or not pll_locked_i;
+
+  CLK_WIZ_I : entity work.clk_wiz_0
+    port map (
+      CLK_IN1  => CLK,
+      CLK_OUT1 => sys_clk,
+      LOCKED   => pll_locked_i
+    );
 
   UART_1 : entity work.uart
     generic map (
@@ -75,7 +91,7 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK        => CLK,
+      CLK        => sys_clk,
       RST        => rst,
       RE_I       => re,
       WE_I       => we,
@@ -94,7 +110,7 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK              => CLK,
+      CLK              => sys_clk,
       RST              => rst,
       RE_O             => re,
       WE_O             => we,
@@ -113,7 +129,7 @@ begin
 
   DMI_UART_1 : entity work.dmi_uart
     port map (
-      CLK => CLK,
+      CLK => sys_clk,
       RST => rst,
 
       TAP_READ_I       => dmi_read,
@@ -133,26 +149,34 @@ begin
       DMI_RST_NO => dmi_reset
     );
 
-  DMI_ECHO : process (CLK) is
-
-    variable dmi : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-
+  DMI_REQUEST : process (sys_clk) is
   begin
 
-    if rising_edge(CLK) then
+    if rising_edge(sys_clk) then
       if (rst = '1') then
-        dmi_resp_valid <= '0';
-        dmi_resp.data  <= (others => '0');
-        dmi_resp.resp  <= (others => '0');
         dmi_req_ready  <= '0';
-        dmi := (others => '0');
+        dmi         <= (others => '0');
       else
         if (dmi_req_valid = '1') then
-          dmi           := dmi_req_to_stl(dmi_req);
+          dmi        <= dmi_req_to_stl(dmi_req);
           dmi_req_ready <= '1';
         else
           dmi_req_ready <= '0';
         end if;
+      end if;
+    end if;
+
+  end process DMI_REQUEST;
+
+  DMI_RESPONSE : process (sys_clk) is
+  begin
+
+    if rising_edge(sys_clk) then
+      if (rst = '1') then
+        dmi_resp_valid <= '0';
+        dmi_resp.data  <= (others => '0');
+        dmi_resp.resp  <= (others => '0');
+      else
         if (dmi_resp_ready = '1') then
           dmi_resp       <= stl_to_dmi_resp(dmi);
           dmi_resp_valid <= '1';
@@ -162,6 +186,105 @@ begin
       end if;
     end if;
 
-  end process DMI_ECHO;
+  end process DMI_RESPONSE;
+
+  SEGSEVEN : process (CLK) is
+
+    variable digit     : std_logic_vector(3 downto 0);
+    variable sel       : integer range 0 to 7;
+    variable counter   : integer range 0 to 100000;
+    -- variable s_counter : integer range 0 to CLK_RATE;
+    -- variable seconds   : integer;
+    variable data      : std_logic_vector(31 downto 0);
+
+  begin
+
+    if (rising_edge(CLK)) then
+      if (rst = '1') then
+        counter   := 0;
+        -- s_counter := 0;
+        digit     := (others => '0');
+        sel       := 0;
+        AN        <= (others => '0');
+        C         <= (others => '1');
+        DP        <= '1';
+      else
+        -- if (s_counter < CLK_RATE) then
+        --   s_counter := s_counter + 1;
+        -- else
+        --   s_counter := 0;
+        --   seconds   := seconds + 1;
+        -- end if;
+        if (counter /= 100000) then
+          counter := counter + 1;
+        else
+          counter := 0;
+          data    := stl_to_dmi_req(dmi).data;
+          -- data    := std_logic_vector(to_unsigned(seconds, 32));
+          digit   := data((sel + 1) * 4 - 1 downto sel * 4);
+          AN      <= "11111111";
+          AN(sel) <= '0';
+
+          case digit is
+
+            when "0000" =>
+              C <= "1000000";
+
+            when "0001" =>
+              C <= "1111001";
+
+            when "0010" =>
+              C <= "0100100";
+
+            when "0011" =>
+              C <= "0110000";
+
+            when "0100" =>
+              C <= "0011001";
+
+            when "0101" =>
+              C <= "0010010";
+
+            when "0110" =>
+              C <= "0000010";
+
+            when "0111" =>
+              C <= "1111000";
+
+            when "1000" =>
+              C <= "0000000";
+
+            when "1001" =>
+              C <= "0010000";
+
+            when "1010" =>
+              C <= "0001000";
+
+            when "1011" =>
+              C <= "0000011";
+
+            when "1100" =>
+              C <= "1000110";
+
+            when "1101" =>
+              C <= "0100001";
+
+            when "1110" =>
+              C <= "0000110";
+
+            when "1111" =>
+              C <= "0001110";
+
+            when others =>
+              C <= "1111111";
+
+          end case;
+
+          sel := (sel + 1) mod 8;
+        end if;
+      end if;
+    end if;
+
+  end process SEGSEVEN;
 
 end architecture BEHAVIORAL;
