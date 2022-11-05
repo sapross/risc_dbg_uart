@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-22
--- Last update: 2022-11-04
+-- Last update: 2022-11-05
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -59,12 +59,20 @@ begin  -- architecture BEHAVIORAL
 
     if rising_edge(CLK) then
       if (RST = '1') then
+        -- DONE_O <= '0';
+
         count <= 0;
+
+        REG_O <= (others => '0');
+        -- D_O <= (others => '0');
       else
         -- Are we done serializing?
         if (RUN_I = '1') then
           if (to_unsigned(8 * (count), NUM_BITS_I'length) < NUM_BITS_I) then
             count <= count + 1;
+            -- DONE_O <= '0';
+            REG_O(8 * (count + 1) - 1 downto 8 * count) <= D_I;
+            -- D_O <= REG_I(8 * (count + 1) - 1 downto 8 * count);
           end if;
         end if;
       end if;
@@ -72,57 +80,63 @@ begin  -- architecture BEHAVIORAL
 
   end process COUNTER;
 
-  DONE_PROC : process (RST, count, NUM_BITS_I) is
-  begin
+  -- DONE_PROC : process (RST, count, NUM_BITS_I) is
+  -- begin
 
-    if (to_unsigned(8 * (count), NUM_BITS_I'length) < NUM_BITS_I or RST = '1') then
-      DONE_O <= '0';
-    else
-      DONE_O <= '1';
-    end if;
+  --   if (to_unsigned(8 * (count), NUM_BITS_I'length) < NUM_BITS_I or RST = '1') then
+  --     DONE_O <= '0';
+  --   else
+  --     DONE_O <= '1';
+  --   end if;
 
-  end process DONE_PROC;
+  -- end process DONE_PROC;
 
-  --Output an aggregate of D_I and deser to REG_O
-  REG_OUTPUT : process (RST,count,D_I,deser) is
-  begin
+  -- --Output an aggregate of D_I and deser to REG_O
+  -- REG_OUTPUT : process (RST,count,D_I,deser) is
+  -- begin
 
-    if (RST = '1') then
-      REG_O <= (others => '0');
-    else
-      if (count = 0) then
-        REG_O(REG_O'length -1 downto 8) <= (others => '0');
-        REG_O(7 downto 0) <= D_I;
-      else
-        REG_O(REG_O'length -1 downto 8*(count)) <= (others => '0');
-        REG_O(8 * (count + 1) - 1 downto 8 * count) <= D_I;
-        REG_O(8*count -1 downto 0) <= deser(8*count -1 downto 0);
-      end if;
-    end if;
-  end process REG_OUTPUT;
+  --   if (RST = '1') then
+  --     REG_O <= (others => '0');
+  --   else
+  --     if (count = 0) then
+  --       REG_O(REG_O'length -1 downto 8) <= (others => '0');
+  --       REG_O(7 downto 0) <= D_I;
+  --     else
+  --       REG_O(REG_O'length -1 downto 8*(count)) <= (others => '0');
+  --       REG_O(8 * (count + 1) - 1 downto 8 * count) <= D_I;
+  --       REG_O(8*count -1 downto 0) <= deser(8*count -1 downto 0);
+  --     end if;
+  --   end if;
+  -- end process REG_OUTPUT;
 
-  --Deserialize D_I into deser.
-  DESERIALIZE: process (CLK) is
-  begin
+  -- --Deserialize D_I into deser.
+  -- DESERIALIZE: process (CLK) is
+  -- begin
 
-    if rising_edge(CLK) then
-      if (RST = '1') then
-        deser <= (others => '0');
-      else
-          deser(8 * (count + 1) - 1 downto 8 * count) <= D_I;
-      end if;
-    end if;
+  --   if rising_edge(CLK) then
+  --     if (RST = '1') then
+  --       deser <= (others => '0');
+  --     else
+  --         deser(8 * (count + 1) - 1 downto 8 * count) <= D_I;
+  --     end if;
+  --   end if;
 
-  end process DESERIALIZE;
+  -- end process DESERIALIZE;
 
   -- Serialize REG_I into D_O.
-  SERIALIZE : process (RST, REG_I, count) is
+  SERIALIZE : process (RST, REG_I, count, NUM_BITS_I) is
   begin
 
     if (RST = '1') then
       D_O <= (others => '0');
+      DONE_O <= '0';
     else
-      D_O <= REG_I(8 * (count + 1) - 1 downto 8 * count);
+      if (to_unsigned(8 * (count), NUM_BITS_I'length) < NUM_BITS_I) then
+        D_O <= REG_I(8 * (count + 1) - 1 downto 8 * count);
+        DONE_O <= '0';
+      else
+        DONE_O <= '1';
+      end if;
     end if;
 
   end process SERIALIZE;

@@ -348,7 +348,7 @@ begin
           end if;
         else
           -- always write to TX if ready.
-          we      <= TX_READY_I;
+          we      <= TX_READY_I and not ser_done;
           ser_run <= TX_READY_I;
           if (ser_done = '1') then
             -- We are done sending if our serializer is done.

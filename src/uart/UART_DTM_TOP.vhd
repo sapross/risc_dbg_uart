@@ -158,7 +158,9 @@ begin
         dmi         <= (others => '0');
       else
         if (dmi_req_valid = '1') then
-          dmi        <= dmi_req_to_stl(dmi_req);
+          if(dmi_req.op = DTM_WRITE) then
+            dmi        <= dmi_req_to_stl(dmi_req);
+          end if;
           dmi_req_ready <= '1';
         else
           dmi_req_ready <= '0';
@@ -178,7 +180,7 @@ begin
         dmi_resp.resp  <= (others => '0');
       else
         if (dmi_resp_ready = '1') then
-          dmi_resp       <= stl_to_dmi_resp(dmi);
+          dmi_resp       <= stl_to_dmi_resp(dmi(31 downto 0) & "00");
           dmi_resp_valid <= '1';
         else
           dmi_resp_valid <= '0';

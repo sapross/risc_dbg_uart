@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-13
--- Last update: 2022-10-14
+-- Last update: 2022-11-04
 -- Platform   :
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -87,7 +87,7 @@ package uart_pkg is
     data : std_logic_vector(31 downto 0);
   end record;
 
-  function stl_to_dmi_req (value : std_logic_vector) return dmi_req_t;
+  function stl_to_dmi_req (value : std_logic_vector(DMI_REQ_LENGTH-1 downto 0)) return dmi_req_t;
 
   function dmi_req_to_stl (dmi_req : dmi_req_t) return std_logic_vector;
 
@@ -98,7 +98,7 @@ package uart_pkg is
 
   function dmi_resp_to_stl (dmi_resp : dmi_resp_t) return std_logic_vector;
 
-  function stl_to_dmi_resp (value : std_logic_vector) return dmi_resp_t;
+  function stl_to_dmi_resp (value : std_logic_vector(DMI_RESP_LENGTH-1 downto 0)) return dmi_resp_t;
 
 end package uart_pkg;
 
@@ -111,7 +111,7 @@ package body uart_pkg is
 
   end function dmi_resp_to_stl;
 
-  function stl_to_dmi_resp (value : std_logic_vector) return dmi_resp_t is
+  function stl_to_dmi_resp (value : std_logic_vector(DMI_RESP_LENGTH-1 downto 0)) return dmi_resp_t is
   begin
 
     return (
@@ -127,7 +127,7 @@ package body uart_pkg is
 
   end function;
 
-  function stl_to_dmi_req (value : std_logic_vector) return dmi_req_t is
+  function stl_to_dmi_req (value : std_logic_vector(DMI_REQ_LENGTH-1 downto 0)) return dmi_req_t is
   begin
 
     return (
