@@ -21,8 +21,6 @@ entity TB_UART_DTM is
 end entity TB_UART_DTM;
 
 architecture TB of TB_UART_DTM is
-  constant SYS_CLK_RATE            : integer := 100 * 10 **6; --Hz
-  constant SYS_CLK_PERIOD          : time    := 10 ns;
   constant CLK_RATE                : integer := 25 * 10 ** 6;  -- Hz
   constant CLK_PERIOD              : time    := 40 ns;          -- ns;
   constant BAUD_RATE               : integer := 3 * 10 ** 6;    -- Hz
@@ -76,7 +74,7 @@ architecture TB of TB_UART_DTM is
     -- Wait until start bit is received.
     while rxd_i = '1' loop
 
-      wait for SYS_CLK_PERIOD;
+      wait for clk_PERIOD;
 
     end loop;
 
@@ -102,17 +100,33 @@ architecture TB of TB_UART_DTM is
 
   signal rxd, txd                  : std_logic;
   signal response                  : std_logic_vector(7 downto 0);
+  
+  signal dmi_resp_valid                             : std_logic;
+  signal dmi_resp_ready                             : std_logic;
+  signal dmi_resp                                   : dmi_resp_t;
 
+  signal dmi_req_valid                              : std_logic;
+  signal dmi_req_ready                              : std_logic;
+  signal dmi_req                                    : dmi_req_t;
+
+  signal dmi                       : std_logic_vector(DMI_REQ_LENGTH -1 downto 0);
 
 begin
-  DUT: entity work.UART_DTM_TOP
+  DUT: entity work.UART_DTM
     generic map (
       CLK_RATE  => CLK_RATE,
-      BAUD_RATE => BAUD_RATE
+      BAUD_RATE => BAUD_RATE,
+      DMI_ABITS => 5
       )
     port map (
       CLK       => CLK,
-      RSTN      => not rst,
+      RST      => rst,
+      DMI_RESP_VALID_I => dmi_resp_valid,
+      DMI_RESP_READY_O => dmi_resp_ready,
+      DMI_RESP_I       => dmi_resp,
+      DMI_REQ_VALID_O  => dmi_req_valid,
+      DMI_REQ_READY_I  => dmi_req_ready,
+      DMI_REQ_O        => dmi_req,
       RXD_DEBUG => rxd,
       TXD_DEBUG => txd);
 
@@ -163,9 +177,9 @@ begin
   begin
 
     clk <= '0';
-    wait for SYS_CLK_PERIOD / 2;
+    wait for clk_PERIOD / 2;
     clk <= '1';
-    wait for SYS_CLK_PERIOD / 2;
+    wait for clk_PERIOD / 2;
 
   end process CLK_PROCESS;
 
@@ -221,7 +235,7 @@ begin
     rxd <= '1';
     wait for 30*CLK_PERIOD;
     rst <= '0';
-    wait for 2 * SYS_CLK_PERIOD;
+    wait for 2 * clk_PERIOD;
 
     -- Testing Read from IDCODE
     report "Read from IDCODE";
@@ -315,5 +329,45 @@ begin
     wait;
 
   end process RECEIVE;
+ DMI_REQUEST : process (clk) is
+  begin
+
+    if rising_edge(clk) then
+      if (rst = '1') then
+        dmi_req_ready  <= '0';
+        dmi         <= (others => '0');
+      else
+        if (dmi_req_valid = '1') then
+          if(dmi_req.op = DTM_WRITE) then
+            dmi        <= dmi_req_to_stl(dmi_req);
+          end if;
+          dmi_req_ready <= '1';
+        else
+          dmi_req_ready <= '0';
+        end if;
+      end if;
+    end if;
+
+  end process DMI_REQUEST;
+
+  DMI_RESPONSE : process (clk) is
+  begin
+
+    if rising_edge(clk) then
+      if (rst = '1') then
+        dmi_resp_valid <= '0';
+        dmi_resp.data  <= (others => '0');
+        dmi_resp.resp  <= (others => '0');
+      else
+        if (dmi_resp_ready = '1') then
+          dmi_resp       <= stl_to_dmi_resp(dmi(31 downto 0) & "00");
+          dmi_resp_valid <= '1';
+        else
+          dmi_resp_valid <= '0';
+        end if;
+      end if;
+    end if;
+
+  end process DMI_RESPONSE;
 
 end architecture TB;

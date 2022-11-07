@@ -373,9 +373,10 @@ begin
             ser_num_bits <= to_unsigned(dtmcs'length, 8);
 
           when ADDR_DMI =>
-
-            ser_reg_in(ser_reg_in'length - 1 downto fsm.dmi'length) <= (others => '0');
-            ser_reg_in(fsm.dmi'length - 1 downto 0)                 <= fsm.dmi;
+            -- Read to dmi returns less bits than required to write since
+            -- dmi_req'length > dmi_resp'length
+            ser_reg_in(ser_reg_in'length - 1 downto DMI_RESP_LENGTH) <= (others => '0');
+            ser_reg_in(DMI_RESP_LENGTH - 1 downto 0)                 <= fsm.dmi(DMI_RESP_LENGTH - 1 downto 0);
 
             ser_num_bits <= to_unsigned(fsm.dmi'length, 8);
 
