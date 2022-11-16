@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß  <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-22
--- Last update: 2022-11-05
+-- Last update: 2022-11-08
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -45,7 +45,7 @@ end entity DE_SERIALIZER;
 architecture BEHAVIORAL of DE_SERIALIZER is
 
   signal count: integer range 0 to MAX_BYTES;
-  signal deser: std_logic_vector(8*MAX_BYTES-1 downto 0);
+  -- signal deser: std_logic_vector(8*MAX_BYTES-1 downto 0);
 
   -- signal ser_in, ser_out : std_logic_vector(8*MAX_BYTES-1 downto 0);
 begin  -- architecture BEHAVIORAL
