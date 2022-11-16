@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // Top level wrapper for a verilator RI5CY testbench
 // Contributor: Robert Balas <balasr@student.ethz.ch>
 
@@ -21,6 +20,7 @@
 #include "Vtb_top_verilator.h"
 #include "verilated_vcd_c.h"
 #include "verilated.h"
+#include "serial_console/serial_console.h"
 
 #include <iostream>
 #include <iomanip>
@@ -29,21 +29,23 @@
 #include <cstdio>
 #include <cstdint>
 #include <cerrno>
+#include <sys/types.h>
 
 void dump_memory();
 double sc_time_stamp();
 
 static vluint64_t t = 0;
 Vtb_top_verilator *top;
+serial_console_t *uart;
 
 int main(int argc, char **argv, char **env)
 {
     Verilated::commandArgs(argc, argv);
     Verilated::traceEverOn(true);
-    top = new Vtb_top_verilator();
+    top  = new Vtb_top_verilator();
+    uart = new serial_console_t();
 
-    svSetScope(svGetScopeFromName(
-        "TOP.tb_top_verilator.mm_ram_i.dp_ram_i"));
+    svSetScope(svGetScopeFromName("TOP.tb_top_verilator.mm_ram_i.dp_ram_i"));
     Verilated::scopesDump();
 
 #ifdef VCD_TRACE
@@ -72,6 +74,7 @@ int main(int argc, char **argv, char **env)
     tfp->close();
 #endif
     delete top;
+    delete uart;
     exit(0);
 }
 

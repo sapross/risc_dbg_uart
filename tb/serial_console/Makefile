@@ -40,8 +40,8 @@ INCLUDE_DIRS    = ./
 LDFLAGS         = $(addprefix -L, $(LIB_DIRS))
 LDLIBS          = $(addprefix -l, $(LIBS))
 
-SRCS            = serial_console.c sim_uart.c
-OBJS            = $(SRCS:.c=.o)
+SRCS            = serial_console.cc
+OBJS            = $(SRCS:.cc=.o)
 INCLUDES        = $(addprefix -I, $(INCLUDE_DIRS))
 
 HEADERS         = $(wildcard *.h)
@@ -95,6 +95,13 @@ $(SV_LIB): $(OBJS)
 		-c $(CPPFLAGS) $< -o $@ $(LDLIBS)
 	$(POSTCOMPILE)
 
+# $@ = name of target
+# $< = first dependency
+%.o: %.cc
+%.o: %.cc $(DEPDIR)/%.d $(DEPDIRS)
+	$(CC) $(DEPFLAGS) $(ALL_CFLAGS) $(INCLUDES) $(LDFLAGS) \
+		-c $(CPPFLAGS) $< -o $@ $(LDLIBS)
+	$(POSTCOMPILE)
 # check if we need to create the dependencies folders (gcc doesn't)
 $(DEPDIRS):
 	$(shell mkdir -p $(DEPDIRS) > /dev/null)

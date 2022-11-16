@@ -35,7 +35,7 @@ VOPT_FLAGS		= -debugdb -fsmdebug -pedanticerrors #=mnprft
 VSIM			= vsim-$(VVERSION)
 VSIM_HOME               = /usr/pack/modelsim-$(VVERSION)-kgf/questasim
 VSIM_FLAGS              =  # user defined
-ALL_VSIM_FLAGS		= $(VSIM_FLAGS) -sv_lib remote_bitbang/librbs_vsim
+ALL_VSIM_FLAGS		= $(VSIM_FLAGS) -sv_lib serial_console/librbs_vsim
 VSIM_DEBUG_FLAGS	= -debugdb
 VSIM_GUI_FLAGS          = -gui -debugdb
 VSIM_SCRIPT_BATCH       = vsim_batch.tcl
@@ -61,6 +61,7 @@ RTLSRC_TB		:= boot_rom.sv \
 				dp_ram.sv \
 				mm_ram.sv \
 				SimJTAG.sv \
+				SimUART.sv \
 				../sva/dm_top_sva.sv \
 				../sva/dm_csrs_sva.sv \
 				../sva/dm_sba_sva.sv \
@@ -71,6 +72,7 @@ RTLSRC_VERI_TB          := boot_rom.sv \
 				dp_ram.sv \
 				mm_ram.sv \
 				SimJTAG.sv \
+				SimUART.sv \
 				tb_top_verilator.sv
 
 RTLSRC_INCDIR           := riscv/rtl/include
@@ -79,7 +81,7 @@ RTLSRC_FPNEW_PKG	:= fpnew/src/fpnew_pkg.sv
 RTLSRC_RISCV_PKG	+= $(addprefix riscv/rtl/include/,\
 				cv32e40p_apu_core_pkg.sv cv32e40p_pkg.sv \
 				../../bhv/include/cv32e40p_tracer_pkg.sv)
-RTLSRC_DM_PKG		+= ../src/dm_pkg.sv
+RTLSRC_DM_PKG		+= ../src/dm_pkg.sv ../src/uart/baudPack.vhd ../src/uart/uart_pkg.vhd
 
 RTLSRC_PKG 		= $(RTLSRC_FPNEW_PKG) dm_tb_pkg.sv $(RTLSRC_RISCV_PKG) $(RTLSRC_DM_PKG)
 RTLSRC_RISCV		:= $(addprefix riscv/rtl/,\
@@ -120,6 +122,12 @@ RTLSRC_DEBUG		+= $(addprefix ../src/,\
 				dm_csrs.sv dmi_cdc.sv dmi_jtag.sv \
 				dmi_jtag_tap.sv dm_mem.sv \
 				dm_sba.sv dm_top.sv dm_obi_top.sv)
+RTLSRC_DEBUG		+= $(addprefix ../src/uart/,\
+				uart_dtm.vhd \
+				uart.vhd baudgen.vhd fifo.vhd \
+				uart_rx.vhd uart_tx.vhd \
+				dmi_uart_tap.vhd de-serializer.vhd \
+				dmi_uart.vhd)
 
 RTLSRC			+= $(RTLSRC_RISCV) $(RTLSRC_COMMON) $(RTLSRC_TECH) $(RTLSRC_DEBUG)
 
@@ -170,7 +178,7 @@ vsim-all: .opt-rtl
 
 # vcs testbench compilation
 
-vcsify: $(RTLSRC_PKG) $(RTLSRC) $(RTLSRC_TB_PKG) $(RTLSRC_TB) remote_bitbang/librbs_vcs.so
+vcsify: $(RTLSRC_PKG) $(RTLSRC) $(RTLSRC_TB_PKG) $(RTLSRC_TB) serial_console/librbs_vcs.so
 	$(VCS) +vc -sverilog -race=all -ignore unique_checks -full64 \
 		-timescale=1ns/1ps \
 		-CC "-I$(VCS_HOME)/include -O3 -march=native" $(VCS_FLAGS) \
@@ -193,19 +201,20 @@ VPATH += ../
 verilate: testbench_verilator
 
 # We set the RUNPATH (not RPATH, allows LD_LIBRARY_PATH to overwrite) to
-# remote_bitbang and manually link against librbs_veri since putting in
+# serial_console and manually link against librbs_veri since putting in
 # librbs_veri.so as parameter doesn't work because it searches in the build
 # directory
 testbench_verilator: $(RTLSRC_VERI_TB) $(RTLSRC_PKG) $(RTLSRC) \
-			remote_bitbang/librbs_veri.so
+			serial_console/librbs_veri.so \
+			serial_console/librbs_veri.so
 	$(VERILATOR) --cc --sv --exe $(VERI_TRACE) \
 		--Wno-lint --Wno-UNOPTFLAT --Wno-BLKANDNBLK \
 		--Wno-MODDUP +incdir+$(RTLSRC_INCDIR) --top-module \
 		tb_top_verilator --Mdir $(VERI_DIR) \
 		-CFLAGS "-std=gnu++11 $(VERI_CFLAGS)" $(VERI_COMPILE_FLAGS) \
 		$(RTLSRC_PKG) $(RTLSRC_VERI_TB) $(RTLSRC) \
-		-LDFLAGS "-L../remote_bitbang \
-		-Wl,--enable-new-dtags -Wl,-rpath,remote_bitbang -lrbs_veri" \
+		-LDFLAGS "-L../serial_console -L../serial_console \
+		-Wl,--enable-new-dtags -Wl,-rpath,serial_console,serial_console -lrbs_veri" \
 		tb_top_verilator.cpp
 	cd $(VERI_DIR) && $(MAKE) -f Vtb_top_verilator.mk
 	cp $(VERI_DIR)/Vtb_top_verilator testbench_verilator
@@ -233,43 +242,61 @@ $(RTLSRC_RISCV_PKG) $(RTLSRC_RISCV):
 	cd riscv/ && git checkout $(CV32E40P_SHA)
 
 # openocd server
-remote_bitbang/librbs_veri.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
-remote_bitbang/librbs_veri.so:
-	$(MAKE) -C remote_bitbang all
-	mv remote_bitbang/librbs.so $@
+serial_console/librbs_veri.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
+serial_console/librbs_veri.so:
+	$(MAKE) -C serial_console all
+	mv serial_console/librbs.so $@
 
-remote_bitbang/librbs_vsim.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
-remote_bitbang/librbs_vsim.so:
-	$(MAKE) -C remote_bitbang all
-	mv remote_bitbang/librbs.so $@
+serial_console/librbs_vsim.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
+serial_console/librbs_vsim.so:
+	$(MAKE) -C serial_console all
+	mv serial_console/librbs.so $@
 
-remote_bitbang/librbs_vcs.so: INCLUDE_DIRS =./ $(VCS_HOME)/include
-remote_bitbang/librbs_vcs.so:
-	$(MAKE) -C remote_bitbang all
-	mv remote_bitbang/librbs.so $@
+serial_console/librbs_vcs.so: INCLUDE_DIRS =./ $(VCS_HOME)/include
+serial_console/librbs_vcs.so:
+	$(MAKE) -C serial_console all
+	mv serial_console/librbs.so $@
+
+# openocd server
+serial_console/librbs_veri.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
+serial_console/librbs_veri.so:
+	$(MAKE) -C serial_console all
+	mv serial_console/librbs.so $@
+
+serial_console/librbs_vsim.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
+serial_console/librbs_vsim.so:
+	$(MAKE) -C serial_console all
+	mv serial_console/librbs.so $@
+
+serial_console/librbs_vcs.so: INCLUDE_DIRS =./ $(VCS_HOME)/include
+serial_console/librbs_vcs.so:
+	$(MAKE) -C serial_console all
+	mv serial_console/librbs.so $@
 
 rbs-clean:
-	$(MAKE) -C remote_bitbang clean
-	rm -rf remote_bitbang/librbs_vsim.so remote_bitbang/librbs_vcs.so
+	$(MAKE) -C serial_console clean
+	rm -rf serial_console/librbs_vsim.so serial_console/librbs_vcs.so
+	$(MAKE) -C serial_console clean
+	rm -rf serial_console/librbs_vsim.so serial_console/librbs_vcs.so
 
 # run tb and exit
 .PHONY: vsim-tb-run
 vsim-tb-run: ALL_VSIM_FLAGS += -c
-vsim-tb-run: vsim-all remote_bitbang/librbs_vsim.so
+vsim-tb-run: vsim-all serial_console/librbs_vsim.so serial_console/librbs_vsim.so
 	$(VSIM) -work $(VWORK) $(ALL_VSIM_FLAGS) \
 	$(RTLSRC_VOPT_TB_TOP) -do 'source $(VSIM_SCRIPT_BATCH); exit -f'
 
 # run tb and drop into interactive shell
 .PHONY: vsim-tb-run-sh
 vsim-tb-run: ALL_VSIM_FLAGS += -c
-vsim-tb-run-sh: vsim-all remote_bitbang/librbs_vsim.so
+vsim-tb-run-sh: vsim-all serial_console/librbs_vsim.so serial_console/librbs_vsim.so
 	$(VSIM) -work $(VWORK) $(ALL_VSIM_FLAGS) \
 	$(RTLSRC_VOPT_TB_TOP) -do $(VSIM_SCRIPT_BATCH)
 
 # run tb with simulator gui
 .PHONY: vsim-tb-run-gui
 vsim-tb-run-gui: ALL_VSIM_FLAGS += $(VSIM_GUI_FLAGS)
-vsim-tb-run-gui: vsim-all remote_bitbang/librbs_vsim.so
+vsim-tb-run-gui: vsim-all serial_console/librbs_vsim.so serial_console/librbs_vsim.so
 	$(VSIM) -work $(VWORK) $(ALL_VSIM_FLAGS) \
 	$(RTLSRC_VOPT_TB_TOP) -do $(VSIM_SCRIPT_GUI)
 
@@ -309,12 +336,12 @@ vsim-run-gui: vsim-tb-run-gui
 
 .PHONY: vcs-run
 vcs-run: vcsify prog/test.hex
-	./simv -sv_lib remote_bitbang/librbs_vcs $(SIMV_FLAGS) "+firmware=prog/test.hex"
+	./simv -sv_lib serial_console/librbs_vcs $(SIMV_FLAGS) "+firmware=prog/test.hex"
 
 .PHONY: vcs-run-gui
 vcs-run-gui: VCS_FLAGS+=-debug_all
 vcs-run-gui: vcsify prog/test.hex
-	./simv -sv_lib remote_bitbang/librbs_vcs $(SIMV_FLAGS) -gui "+firmware=prog/test.hex"
+	./simv -sv_lib serial_console/librbs_vcs $(SIMV_FLAGS) -gui "+firmware=prog/test.hex"
 
 # general targets
 .PHONY: clean

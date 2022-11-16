@@ -11,8 +11,8 @@ unsigned int get_baudrate(int baudrate);
 class serial_console_t
 {
   public:
-    serial_console_t(char *name);
-    void tick(vluint64_t time, uint8_t *rx, uint8_t *tx);
+    serial_console_t();
+    int tick(uint8_t *rx, uint8_t *tx);
     unsigned char done()
     {
         return quit;
@@ -38,11 +38,12 @@ class serial_console_t
     std::queue<uint8_t> output;
 };
 
-static const int baud_rate   = 3 * 10e6;
-static const int baud_period = 333; // ns
-static const int clk_rate    = 10e8;
-static const int clk_period  = 10; // ns
-static const int baud_ticks  = clk_rate / baud_rate;
+static const uint64_t baud_rate   = 3 * 10e6;
+static const uint64_t baud_period = 333; // ns
+static const uint64_t clk_rate    = 50 * 10e6;
+static const uint64_t clk_period  = 10; // ns
+// The number of ticks required until one symbol has been send by uart.
+static const uint64_t baud_ticks = clk_rate / baud_rate;
 
 enum uart_st { st_idle, st_start, st_data, st_stop };
 

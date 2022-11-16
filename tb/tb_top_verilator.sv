@@ -16,6 +16,7 @@ module tb_top_verilator #(
    parameter int unsigned RAM_ADDR_WIDTH = 22,
    parameter logic [31:0] BOOT_ADDR = 'h1A00_0180,
    parameter bit          JTAG_BOOT = 1,
+   parameter bit          UART_BOOT = 1,
    parameter int unsigned  OPENOCD_PORT = 9999
 ) (
    input logic  clk_i,
@@ -52,6 +53,7 @@ module tb_top_verilator #(
     logic [31:0]                 data_rdata;
     logic [31:0]                 data_wdata;
 
+/* -----\/----- EXCLUDED -----\/-----
     // jtag openocd bridge signals
     logic                        sim_jtag_tck;
     logic                        sim_jtag_tms;
@@ -60,14 +62,25 @@ module tb_top_verilator #(
     logic                        sim_jtag_tdo;
     logic [31:0]                 sim_jtag_exit;
     logic                        sim_jtag_enable;
+ -----/\----- EXCLUDED -----/\----- */
+
+  //uart openocd bridge signals
+  logic                          sim_uart_clk;
+  logic                          sim_uart_rst;
+  logic                          sim_uart_enable;
+  logic                          sim_uart_tx;
+  logic                          sim_uart_rx;
+  logic                          sim_uart_rx_driven;
+  logic [31:0]                   sim_uart_exit;
+
 
     // signals for debug unit
     logic                        debug_req_ready;
     dm::dmi_resp_t               debug_resp;
-    logic                        jtag_req_valid;
-    dm::dmi_req_t                jtag_dmi_req;
-    logic                        jtag_resp_ready;
-    logic                        jtag_resp_valid;
+    logic                        dtm_req_valid;
+    dm::dmi_req_t                dtm_dmi_req;
+    logic                        dtm_resp_ready;
+    logic                        dtm_resp_valid;
     logic [NrHarts-1:0]          dm_debug_req;
     logic                        ndmreset, ndmreset_n;
 
@@ -99,6 +112,10 @@ module tb_top_verilator #(
 
     // make jtag bridge work
     assign sim_jtag_enable = JTAG_BOOT;
+
+    // make uart bridge work
+    assign sim_uart_enable = UART_BOOT;
+
 
     // instantiate the core
     cv32e40p_core #(
@@ -210,6 +227,7 @@ module tb_top_verilator #(
         .tests_passed_o ( tests_passed_o                 ),
         .tests_failed_o ( tests_failed_o                 ));
 
+/* -----\/----- EXCLUDED -----\/-----
     // debug subsystem
     dmi_jtag #(
         .IdcodeValue          ( 32'h249511C3    )
@@ -217,12 +235,12 @@ module tb_top_verilator #(
         .clk_i                ( clk_i           ),
         .rst_ni               ( rst_ni          ),
         .testmode_i           ( 1'b0            ),
-        .dmi_req_o            ( jtag_dmi_req    ),
-        .dmi_req_valid_o      ( jtag_req_valid  ),
+        .dmi_req_o            ( dtm_dmi_req    ),
+        .dmi_req_valid_o      ( dtm_req_valid  ),
         .dmi_req_ready_i      ( debug_req_ready ),
         .dmi_resp_i           ( debug_resp      ),
-        .dmi_resp_ready_o     ( jtag_resp_ready ),
-        .dmi_resp_valid_i     ( jtag_resp_valid ),
+        .dmi_resp_ready_o     ( dtm_resp_ready ),
+        .dmi_resp_valid_i     ( dtm_resp_valid ),
         .dmi_rst_no           (                 ), // not connected
         .tck_i                ( sim_jtag_tck    ),
         .tms_i                ( sim_jtag_tms    ),
@@ -231,7 +249,24 @@ module tb_top_verilator #(
         .td_o                 ( sim_jtag_tdo    ),
         .tdo_oe_o             (                 )
     );
+ -----/\----- EXCLUDED -----/\----- */
 
+uart_dtm #(
+           .CLK_RATE  ( 50 * 10 **6 ),
+           .BAUD_RATE ( 3 * 10 **6  ),
+           .DMI_ABITS ( 5           )
+           ) i_uart_dtm (
+           .CLK                  ( clk_i                 ),
+           .RST                  ( !rst_ni               ),
+           .DMI_REQ_VALID_O      ( dtm_req_valid      ),
+           .DMI_REQ_READY_I      ( debug_req_ready      ),
+           .DMI_REQ_O            ( dtm_req            ),
+           .DMI_RESP_VALID_I     ( dtm_resp_valid     ),
+           .DMI_RESP_READY_O     ( dtm_resp_ready     ),
+           .DMI_RESP_I           ( debug_resp           ),
+           .RXD_DEBUG            ( uart_rx ),
+           .TXD_DEBUG            ( uart_tx )
+);
     dm_top #(
        .NrHarts           ( NrHarts           ),
        .BusWidth          ( 32                ),
@@ -264,11 +299,11 @@ module tb_top_verilator #(
        .master_r_rdata_i  ( sb_rdata          ),
 
        .dmi_rst_ni        ( rst_ni            ),
-       .dmi_req_valid_i   ( jtag_req_valid    ),
+       .dmi_req_valid_i   ( dtm_req_valid    ),
        .dmi_req_ready_o   ( debug_req_ready   ),
-       .dmi_req_i         ( jtag_dmi_req      ),
-       .dmi_resp_valid_o  ( jtag_resp_valid   ),
-       .dmi_resp_ready_i  ( jtag_resp_ready   ),
+       .dmi_req_i         ( dtm_dmi_req      ),
+       .dmi_resp_valid_o  ( dtm_resp_valid   ),
+       .dmi_resp_ready_i  ( dtm_resp_ready   ),
        .dmi_resp_o        ( debug_resp        )
     );
 
@@ -292,24 +327,35 @@ module tb_top_verilator #(
         .init_no      (                      ) // keep open
     );
 
-    // jtag calls from dpi
-    SimJTAG #(
-        .TICK_DELAY (1),
-        .PORT(OPENOCD_PORT)
-    ) i_sim_jtag (
-        .clock                ( clk_i                ),
-        .reset                ( ~rst_ni              ),
-        .enable               ( sim_jtag_enable      ),
-        .init_done            ( rst_ni               ),
-        .jtag_TCK             ( sim_jtag_tck         ),
-        .jtag_TMS             ( sim_jtag_tms         ),
-        .jtag_TDI             ( sim_jtag_tdi         ),
-        .jtag_TRSTn           ( sim_jtag_trstn       ),
-        .jtag_TDO_data        ( sim_jtag_tdo         ),
-        .jtag_TDO_driven      ( 1'b1                 ),
-        .exit                 ( sim_jtag_exit        )
+  // jtag calls from dpi
+  SimJTAG #(
+            .TICK_DELAY (1),
+            .PORT(OPENOCD_PORT)
+            ) i_sim_jtag (
+                          .clock                ( clk_i                ),
+                          .reset                ( ~rst_ni              ),
+                          .enable               ( sim_jtag_enable      ),
+                          .init_done            ( rst_ni               ),
+                          .jtag_TCK             ( sim_jtag_tck         ),
+                          .jtag_TMS             ( sim_jtag_tms         ),
+                          .jtag_TDI             ( sim_jtag_tdi         ),
+                          .jtag_TRSTn           ( sim_jtag_trstn       ),
+                          .jtag_TDO_data        ( sim_jtag_tdo         ),
+                          .jtag_TDO_driven      ( 1'b1                 ),
+                          .exit                 ( sim_jtag_exit        )
+                          );
+  SimUART #(
+            .TICK_DELAY (1)
+            ) i_sim_uart (
+                          .clock                ( clk_i                ),
+                          .reset                ( ~rst_ni              ),
+                          .enable               ( sim_uart_enable      ),
+                          .init_done            ( rst_ni               ),
+                          .uart_tx              ( sim_uart_tx          ),
+                          .uart_rx              ( sim_uart_rx          ),
+                          .uart_rx_driven       ( 1'b1                 ),
+                          .exit                 ( sim_jtag_exit        )
     );
-
     always_comb begin : jtag_exit_handler
         if (sim_jtag_exit)
             $finish(2); // print stats too
