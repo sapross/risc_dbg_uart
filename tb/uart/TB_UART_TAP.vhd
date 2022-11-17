@@ -16,17 +16,17 @@ library IEEE;
   use IEEE.MATH_REAL.floor;
 
 library WORK;
-  use WORK.uart_pkg.all;
+  use WORK.uart_pkg_vhdl.all;
 
 entity TB_UART_TAP is
 end entity TB_UART_TAP;
 
 architecture TB of TB_UART_TAP is
 
-  constant BAUD_RATE               : integer := 3 * 10 ** 6;    -- Hz
-  constant BAUD_PERIOD             : time    := 333 ns;         -- ns;
-  constant CLK_RATE                : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD              : time    := 10 ns;          -- ns;
+  constant BAUD_RATE                      : integer := 3 * 10 ** 6;    -- Hz
+  constant BAUD_PERIOD                    : time    := 333 ns;         -- ns;
+  constant CLK_RATE                       : integer := 100 * 10 ** 6;  -- Hz
+  constant CLK_PERIOD                     : time    := 10 ns;          -- ns;
 
   -- Simulates receiving a byte from UART-Interface.
 
@@ -58,26 +58,28 @@ architecture TB of TB_UART_TAP is
 
   -- Simulates the behavior of the dmi_handler
 
-  signal clk                       : std_logic;
-  signal rst                       : std_logic;
+  signal clk                              : std_logic;
+  signal rst, rst_n                       : std_logic;
 
-  signal we                        : std_logic;
-  signal re                        : std_logic;
-  signal tx_ready                  : std_logic;
-  signal rx_empty                  : std_logic;
-  signal dsend                     : std_logic_vector(7 downto 0);
-  signal drec                      : std_logic_vector(7 downto 0);
+  signal we                               : std_logic;
+  signal re                               : std_logic;
+  signal tx_ready                         : std_logic;
+  signal rx_empty                         : std_logic;
+  signal dsend                            : std_logic_vector(7 downto 0);
+  signal drec                             : std_logic_vector(7 downto 0);
 
-  signal dmi_reset                 : std_logic;
-  signal dmi_error                 : std_logic_vector(1 downto 0);
-  signal dmi_read                  : std_logic;
-  signal dmi_write                 : std_logic;
-  signal tap_dmi                   : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal handler_dmi               : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal local_dmi                 : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
-  signal done                      : std_logic;
+  signal dmi_reset                        : std_logic;
+  signal dmi_error                        : std_logic_vector(1 downto 0);
+  signal dmi_read                         : std_logic;
+  signal dmi_write                        : std_logic;
+  signal tap_dmi                          : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal handler_dmi                      : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal local_dmi                        : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
+  signal done                             : std_logic;
 
 begin
+
+  rst_n <= not rst;
 
   DUT : entity work.dmi_uart_tap
     generic map (
@@ -85,8 +87,8 @@ begin
       BAUD_RATE => BAUD_RATE
     )
     port map (
-      CLK              => clk,
-      RST              => rst,
+      CLK_I            => clk,
+      RST_NI           => rst_n,
       RE_O             => re,
       WE_O             => we,
       TX_READY_I       => tx_ready,

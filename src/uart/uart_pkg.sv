@@ -15,7 +15,9 @@ package uart_pkg;
   localparam logic [31:0] IDCODEVALUE = 32'h01;
   localparam integer      CMDLENGTH = 8 - IRLENGTH;
 
-  typedef enum            logic [CMD_LENGTH-1:0] {
+  localparam logic [7:0] HEADER = 8'h01; // SOF in ASCII
+
+  typedef enum            logic [CMDLENGTH-1:0] {
                                                   CMD_NOP = 3'b000,
                                                   CMD_READ = 3'b001,
                                                   CMD_WRITE = 3'b010,
@@ -29,8 +31,8 @@ package uart_pkg;
                                                 ADDR_DMI = 5'b10001
                                                 } addr_e;
   localparam integer      ABITS = 7;
-  localparam integer      DMI_REQ_LENGTH = $size(dmi_req_t);
-  localparam integer      DMI_RESP_LENGTH = $size(dmi_resp_t);
+  // localparam integer DMI_REQ_LENGTH = 41;
+  // localparam integer DMI_RESP_LENGTH = 34;
 
   typedef enum logic [1:0] {
     DMINoError = 2'h0, DMIReservedError = 2'h1,

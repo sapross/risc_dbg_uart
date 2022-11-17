@@ -6,7 +6,7 @@
 -- Author     : Stephan Proß <s.pross@stud.uni-heidelberg.de>
 -- Company    :
 -- Created    : 2022-09-13
--- Last update: 2022-11-04
+-- Last update: 2022-11-17
 -- Platform   :
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -24,13 +24,10 @@ library IEEE;
   use IEEE.STD_LOGIC_1164.ALL;
   use IEEE.NUMERIC_STD.ALL;
 
-package uart_pkg is
+package uart_pkg_vhdl is
 
   constant IRLENGTH    : integer := 5;
   constant IDCODEVALUE : std_logic_vector(31 downto 0) := X"00000001";
-
-  constant BYPASS : std_logic_vector(7 downto 0)  := (others => '0');
-  constant IDCODE : std_logic_vector(31 downto 0) := X"00000001";
 
   constant HEADER : std_logic_vector( 7 downto 0) := X"01"; -- SOF in ASCII
 
@@ -100,9 +97,9 @@ package uart_pkg is
 
   function stl_to_dmi_resp (value : std_logic_vector(DMI_RESP_LENGTH-1 downto 0)) return dmi_resp_t;
 
-end package uart_pkg;
+end package uart_pkg_vhdl;
 
-package body uart_pkg is
+package body uart_pkg_vhdl is
 
   function dmi_resp_to_stl (dmi_resp : dmi_resp_t) return std_logic_vector is
   begin
@@ -184,4 +181,4 @@ package body uart_pkg is
 
   end function;
 
-end package body uart_pkg;
+end package body uart_pkg_vhdl;

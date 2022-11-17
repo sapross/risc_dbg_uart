@@ -19,10 +19,10 @@ package baud_pkg;
       return (hz/(ovsamp_rate*baudrate));
     end
     return 1;
-  endfunction // integer
+  endfunction // bddiv
 
   function automatic integer ovsamp( integer hz );
     return 8;
-  endfunction // integer
+  endfunction // ovsamp
 
 endpackage : baud_pkg

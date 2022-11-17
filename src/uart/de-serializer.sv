@@ -47,6 +47,9 @@ module DE_SERIALIZER #(
 
           VALID_O <= 1;
         end
+        else begin
+          VALID_O <= 0;
+        end
       end
     end // else: !if(!RST_NI)
   end // block: BYTE_COUNTER
