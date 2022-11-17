@@ -7,15 +7,18 @@
 // Last Modified On: Wed Nov 16 17:52:38 2022
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
+
+import baud_pkg::*;
+
 module UART_RX #(
-                 parameter integer OVERSAMPLING = 16,
-                 parameter integer BDDIVIDER = 27
+              parameter integer CLK_RATE = 100*10**6,
+              parameter integer BAUD_RATE = 115200
 )(
    input logic        CLK_I,
    input logic        RST_NI,
    output logic       RX_DONE_O,
    // output logic       RX_BRK_O,
-   input logic        RX,
+   input logic        RX_I,
    output logic [7:0] DATA_O
 ) ;
   typedef enum        {st_idle, st_start, st_data, st_stop} state_t;
@@ -32,28 +35,31 @@ module UART_RX #(
   assign RX_DONE_O = valid;
   // assign RX_BRK_O = brk;
 
-  const integer       MAX_BAUD_COUNT = 3*OVERSAMPLING / BDDIVIDER / 2;
-  const integer       SAMPLE_INTERVAL = OVERSAMPLING * BDDIVIDER;
+  localparam integer       OVERSAMPLING = ovsamp(CLK_RATE);
+  localparam integer       BDDIVIDER = bddiv(CLK_RATE, BAUD_RATE);
+  localparam integer       SAMPLE_INTERVAL = OVERSAMPLING * BDDIVIDER;
+
+
   logic               baudtick;
-  integer             baud_count, baud_interval;
+  bit [$clog2(SAMPLE_INTERVAL):0] baud_count, baud_interval;
 
 
 
   always_ff @(posedge CLK_I) begin : STABILIZE_RX
-    if (~RST_NI) begin
+    if (!RST_NI) begin
       rx_buf <= '1;
       rx <= 1;
       rx_prev <= 1;
     end
     else begin
-      rx_buf <= {RX, rx_buf[$size(rx_buf)-1:1]};
+      rx_buf <= {RX_I, rx_buf[$size(rx_buf)-1:1]};
       rx <= rx_buf[0];
       rx_prev <= rx;
     end
   end // block: STABILIZE_RX
 
   always_ff @(posedge CLK_I) begin : CLOCK_RECOVERY
-    if( RST_NI == 0 || state == st_idle) begin
+    if( !RST_NI || state == st_idle) begin
       baudtick <= 0;
       baud_count <= 0;
       baud_interval <= SAMPLE_INTERVAL/2 -1;
@@ -66,17 +72,17 @@ module UART_RX #(
       else begin
         baud_interval <= SAMPLE_INTERVAL - 1;
         baud_count <= 0;
-        baudtick <= 0;
+        baudtick <= 1;
       end
       if( rx != rx_prev ) begin
         baud_interval <= baud_interval - (OVERSAMPLING*BDDIVIDER/2 - baud_count);
       end
-    end // else: !if(~RST_NI | state == st_idle)
+    end // else: !if(!RST_NI | state == st_idle)
   end // block: CLOCK_RECOVERY
 
 
   always_ff @(posedge CLK_I) begin : FSM_CORE
-    if (~RST_NI) begin
+    if (RST_NI==0) begin
       state <= st_idle;
       data <= '0;
       nbit <= 0;
@@ -91,7 +97,7 @@ module UART_RX #(
   always_comb begin : FSM
     state_next = state;
     data_next = data;
-    nbit_next = 0;
+    nbit_next = nbit;
     valid = 0;
     brk = 0;
     case ( state )
@@ -110,6 +116,7 @@ module UART_RX #(
           nbit_next = nbit + 1;
           data_next[nbit] = rx;
           if(nbit >= 7) begin
+            nbit_next  = 0;
             state_next = st_stop;
           end
         end

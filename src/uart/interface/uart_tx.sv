@@ -10,8 +10,8 @@
 
 
 module UART_TX #(
-                 parameter integer OVERSAMPLING = 16,
-                 parameter integer BDDIVIDER = 27
+                 parameter integer CLK_RATE = 100*10**6,
+                 parameter integer BAUD_RATE = 115200
                  ) (
                     input logic       CLK_I,
                     input logic       RST_NI,
@@ -19,8 +19,11 @@ module UART_TX #(
                     output logic      TX_DONE_O,
                     output logic      TX_O,
                     input logic [7:0] DATA_I
-
                     ) ;
+
+  const integer                       OVERSAMPLING = ovsamp(CLK_RATE);
+  const integer                       BDDIVIDER = bddiv(CLK_RATE, BAUD_RATE);
+
   typedef enum                        logic {
                                              st_idle = 1'b0,
                                              st_send = 1'b1
@@ -83,7 +86,7 @@ module UART_TX #(
       if (TX_START_I == 1) begin
         btick_cnt_next <= 0;
         bitnum_next <= 0;
-        frame_next <= {1,DATA_I,0};
+        frame_next <= {1'b1,DATA_I,1'b0};
       end
 
     end // if (state == st_idle)
@@ -92,7 +95,7 @@ module UART_TX #(
       // Multiplex message into TX
       tx_next <= frame[bitnum];
 
-      if (B_TICK_I) begin
+      if (baudtick) begin
         if (btick_cnt == OVERSAMPLING -1) begin
           btick_cnt_next <= 0;
           if (bitnum == 9) begin
@@ -106,7 +109,7 @@ module UART_TX #(
         else begin
           btick_cnt_next <= btick_cnt + 1;
         end // else: !if(btick_cnt == OVERSAMPLING -1)
-      end // if (B_TICK_I)
+      end // if (baudtick)
     end // if (state == st_send)
   end // block: FSM
 

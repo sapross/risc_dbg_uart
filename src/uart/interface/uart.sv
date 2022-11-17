@@ -8,7 +8,6 @@
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
 
-// import baud_pkg::*;
 
 module UART #(
               parameter integer CLK_RATE = 100*10**6,
@@ -41,22 +40,22 @@ module UART #(
 
  // RX half of the interface
   UART_RX #(
-            .OVERSAMPLING ( ovsamp(CLK_RATE)           ),
-            .BDDIVIDER    ( bddiv(CLK_RATE, BAUD_RATE) )
-            ) uart_rx_i
+            .CLK_RATE  ( CLK_RATE  ),
+            .BAUD_RATE ( BAUD_RATE )
+            ) UART_RX_I
     (/*AUTOINST*/
      .CLK_I     ( CLK_I  ),
      .RST_NI    ( RST_NI ),
      .RX_DONE_O ( rx_wr  ),
-     .RX        ( RX_I   ),
+     .RX_I      ( RX_I   ),
      .DATA_O    ( rx_din )
      );
 
-  FIFO FIFO_RX ( /*AUTOINST*/
+  SIMPLE_FIFO FIFO_RX ( /*AUTOINST*/
             .CLK_I    ( CLK_I      ),
             .RST_NI   ( RST_NI     ),
-            .RE_I     ( tx_rd      ),
-            .WE_I     ( tx_wr      ),
+            .RE_I     ( rx_rd      ),
+            .WE_I     ( rx_wr      ),
             .W_DATA_I ( rx_din     ),
             .R_DATA_O ( rx_dout    ),
             .FULL_O   ( RX_EMPTY_O ),
@@ -65,24 +64,25 @@ module UART #(
 
  // TX half of the interface
   UART_TX #(
-            .OVERSAMPLING ( ovsamp(CLK_RATE) )
-            ) uart_tx_i
+            .CLK_RATE  ( CLK_RATE  ),
+            .BAUD_RATE ( BAUD_RATE )
+            ) UART_TX_I
     (/*AUTOINST*/
      .CLK_I      ( CLK_I    ),
      .RST_NI     ( RST_NI   ),
      .TX_START_I ( tx_start ),
      .TX_DONE_O  ( tx_rd    ),
-     .TX         ( TX_O     ),
+     .TX_O       ( TX_O     ),
      .DATA_I     ( tx_dout  )
      );
 
-  FIFO FIFO_TX ( /*AUTOINST*/
+  SIMPLE_FIFO FIFO_TX ( /*AUTOINST*/
             .CLK_I    ( CLK_I    ),
             .RST_NI   ( RST_NI   ),
             .RE_I     ( tx_rd    ),
             .WE_I     ( WE_I     ),
             .W_DATA_I ( DSEND_I  ),
-            .R_DATA_O ( rx_dout  ),
+            .R_DATA_O ( tx_dout  ),
             .FULL_O   ( tx_full  ),
             .EMPTY_O  ( tx_empty )
              );

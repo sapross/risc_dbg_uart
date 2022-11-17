@@ -7,7 +7,7 @@
 // Last Modified On: Wed Nov 16 15:21:46 2022
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
-module FIFO #(
+module SIMPLE_FIFO #(
 parameter integer ABITS = 4,
 parameter integer DBITS = 8
 )(
@@ -24,19 +24,23 @@ parameter integer DBITS = 8
   typedef logic [ABITS-1:0] atype;
   dtype [2**ABITS-1:0] ram;
 
-  integer      w_ptr;
-  integer      w_ptr_next;
-  integer      w_ptr_succ;
+  typedef bit [ABITS-1:0]   ptype;
 
-  integer      r_ptr;
-  integer      r_ptr_next;
-  integer      r_ptr_succ;
+  ptype      w_ptr;
+  ptype      w_ptr_next;
+  ptype      w_ptr_inc;
 
-  logic        full_i, full_next;
-  logic        empty_i, empty_next;
+  ptype      r_ptr;
+  ptype      r_ptr_next;
+  ptype      r_ptr_inc;
+
+  logic        full, full_next;
+  logic        empty, empty_next;
   logic        w_en;
 
-  assign w_en = WE_I & ~full_i;
+  assign w_en = WE_I & ~full;
+  assign FULL_O = full;
+  assign EMPTY_O = empty;
 
   always_ff @(posedge CLK_I) begin : PROC_WRITE
     if(w_en) begin
@@ -49,37 +53,35 @@ parameter integer DBITS = 8
   end
 
   always_ff @(posedge CLK_I) begin : FSM_CORE
-    w_ptr_succ <= (w_ptr + 1) % 2 ** ABITS;
-    r_ptr_succ <= (r_ptr + 1) % 2 ** ABITS;
-    if (~RST_NI) begin
+    if (!RST_NI) begin
       w_ptr <= 0;
       r_ptr <= 0;
-      full_i <= 0;
-      empty_i <= 0;
+      full <= 0;
+      empty <= 0;
     end else begin
       w_ptr <= w_ptr_next;
       r_ptr <= r_ptr_next;
-      full_i <= full_next;
-      empty_i <= empty_next;
-    end // else: !if~RST_NI
+      full <= full_next;
+      empty <= empty_next;
+    end // else: !if!RST_NI
   end // block: FSM_CORE
 
   always_comb begin : FSM
-    w_ptr_succ = (w_ptr + 1 ) %  2 ** ABITS;
-    r_ptr_succ = (r_ptr + 1 ) %  2 ** ABITS;
+    w_ptr_inc = (w_ptr + 1 ) %  2 ** ABITS;
+    r_ptr_inc = (r_ptr + 1 ) %  2 ** ABITS;
 
     w_ptr_next = w_ptr;
     r_ptr_next = r_ptr;
 
-    full_next  = full_i;
-    empty_next = empty_i;
+    full_next  = full;
+    empty_next = empty;
 
     if (~w_en & RE_I) begin
 
-      if (~empty_i) begin
-        r_ptr_next = r_ptr_succ;
+      if (!empty) begin
+        r_ptr_next = r_ptr_inc;
         full_next = 0;
-        if (r_ptr_succ == w_ptr) begin
+        if (r_ptr_inc == w_ptr) begin
           empty_next = 1;
         end
       end
@@ -87,10 +89,10 @@ parameter integer DBITS = 8
     end
     else if (w_en & ~RE_I) begin
 
-      if (~full_i) begin
-        w_ptr_next = w_ptr_succ;
+      if (!full) begin
+        w_ptr_next = w_ptr_inc;
         empty_next = 0;
-        if (w_ptr_succ == r_ptr) begin
+        if (w_ptr_inc == r_ptr) begin
           full_next = 1;
         end
       end
@@ -98,8 +100,8 @@ parameter integer DBITS = 8
     end
     else if (w_en & RE_I) begin
 
-      w_ptr_next = w_ptr_succ;
-      r_ptr_next = r_ptr_succ;
+      w_ptr_next = w_ptr_inc;
+      r_ptr_next = r_ptr_inc;
 
     end
   end // block: FSM

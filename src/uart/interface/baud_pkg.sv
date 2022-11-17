@@ -16,13 +16,13 @@ package baud_pkg;
       else
         $error("Baudrate must be smaller than Clock Rate / ovsamp_rate!");
     if (hz > ovsamp_rate*baudrate) begin
-      return (hz/ovsamp_rate*baudrate);
+      return (hz/(ovsamp_rate*baudrate));
     end
     return 1;
   endfunction // integer
 
   function automatic integer ovsamp( integer hz );
-    return ovsamp_rate;
+    return 8;
   endfunction // integer
 
 endpackage : baud_pkg
