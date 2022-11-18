@@ -11,24 +11,26 @@
 ----------------------------------------------------------------------------------
 
 library IEEE;
-  use IEEE.STD_LOGIC_1164.all;
-  use IEEE.NUMERIC_STD.all;
+  use ieee.std_logic_1164.all;
+  use ieee.numeric_std.all;
 
 library WORK;
-  use WORK.uart_pkg.all;
+  use work.uart_pkg_vhdl.all;
+  use work.dm.all;
 
 entity TB_UART_DMI is
 end entity TB_UART_DMI;
 
 architecture TB of TB_UART_DMI is
 
-  constant CLK_RATE                     : integer := 100 * 10 ** 6;  -- Hz
-  constant CLK_PERIOD                   : time    := 10 ns;          -- ns;
-  constant BAUD_RATE                    : integer := 3 * 10 ** 6;    -- Hz
-  constant BAUD_PERIOD                  : time    := 333 ns;         -- ns;
+  constant clk_rate                     : integer := 100 * 10 ** 6;  -- Hz
+  constant clk_period                   : time    := 10 ns;          -- ns;
+  constant baud_rate                    : integer := 3 * 10 ** 6;    -- Hz
+  constant baud_period                  : time    := 333 ns;         -- ns;
 
   signal clk                            : std_logic;
   signal rst                            : std_logic;
+  signal rst_n                          : std_logic;
 
   signal tap_read                       : std_logic;
   signal tap_write                      : std_logic;
@@ -40,20 +42,22 @@ architecture TB of TB_UART_DMI is
 
   signal dmi_resp_valid                 : std_logic;
   signal dmi_resp_ready                 : std_logic;
-  signal dmi_resp                       : dmi_resp_t;
+  signal dmi_resp                       : std_logic_vector(DMI_RESP_LENGTH - 1 downto 0);
 
   signal dmi_req_valid                  : std_logic;
   signal dmi_req_ready                  : std_logic;
-  signal dmi_req                        : dmi_req_t;
+  signal dmi_req                        : std_logic_vector(DMI_REQ_LENGTH - 1 downto 0);
 
   signal dmi_reset                      : std_logic;
 
 begin
 
+  rst_n <= not rst;
+
   DMI_UART_1 : entity work.dmi_uart
     port map (
-      CLK => clk,
-      RST => rst,
+      CLK_I  => clk,
+      RST_NI => rst_n,
 
       TAP_READ_I       => tap_read,
       TAP_WRITE_I      => tap_write,
@@ -77,9 +81,9 @@ begin
   begin
 
     clk <= '0';
-    wait for CLK_PERIOD / 2;
+    wait for clk_period / 2;
     clk <= '1';
-    wait for CLK_PERIOD / 2;
+    wait for clk_period / 2;
 
   end process CLK_PROCESS;
 
@@ -87,30 +91,28 @@ begin
   begin
 
     wait for 1 ps;
-    dmi_dm         <= (others => '0');
-    dmi_resp_valid <= '0';
-    dmi_resp.data  <= (others => '0');
-    dmi_resp.resp  <= (others => '0');
-    dmi_req_ready  <= '0';
-    wait for 2 * CLK_PERIOD;
+    dmi_dm        <= (others => '0');
+    dmi_resp      <= (others => '0');
+    dmi_req_ready <= '0';
+    wait for 2 * clk_period;
 
     while (true) loop
 
       if (dmi_resp_ready = '1') then
-        dmi_resp       <= stl_to_dmi_resp(dmi_dm);
+        dmi_resp       <= dmi_dm(dmi_resp'length - 1 downto 0);
         dmi_resp_valid <= '1';
       else
         dmi_resp_valid <= '0';
       end if;
 
       if (dmi_req_valid = '1') then
-        dmi_dm        <= dmi_req_to_stl(dmi_req);
+        dmi_dm        <= dmi_req;
         dmi_req_ready <= '1';
       else
         dmi_req_ready <= '0';
       end if;
 
-      wait for CLK_PERIOD;
+      wait for clk_period;
 
     end loop;
 
@@ -125,9 +127,9 @@ begin
     tap_read       <= '0';
     tap_write      <= '0';
     dmi_hard_reset <= '0';
-    wait for CLK_PERIOD;
+    wait for clk_period;
     rst            <= '0';
-    wait for 2 * CLK_PERIOD;
+    wait for 2 * clk_period;
 
     dmi(dmi'Length - 1 downto 34) <= (others => '1');
     dmi(33 downto 32)             <= DTM_READ;
@@ -136,25 +138,25 @@ begin
 
     while done = '0' loop
 
-      wait for CLK_PERIOD;
+      wait for clk_period;
 
     end loop;
 
     tap_write <= '0';
-    wait for CLK_PERIOD;
+    wait for clk_period;
     tap_read  <= '1';
 
     while done = '0' loop
 
-      wait for CLK_PERIOD;
+      wait for clk_period;
 
     end loop;
 
     dmi            <= dmi_tap;
     tap_read       <= '0';
-    wait for CLK_PERIOD * 2;
+    wait for clk_period * 2;
     dmi_hard_reset <= '1';
-    wait for CLK_PERIOD;
+    wait for clk_period;
     dmi_hard_reset <= '0';
     wait;
 
