@@ -82,32 +82,32 @@ module UART_TX #(
 
     if (state == st_idle) begin
 
-      tx_next <= 1;
+      tx_next = 1;
       if (TX_START_I == 1) begin
-        btick_cnt_next <= 0;
-        bitnum_next <= 0;
-        frame_next <= {1'b1,DATA_I,1'b0};
+        btick_cnt_next = 0;
+        bitnum_next = 0;
+        frame_next = {1'b1,DATA_I,1'b0};
       end
 
     end // if (state == st_idle)
 
     else if (state == st_send) begin
       // Multiplex message into TX
-      tx_next <= frame[bitnum];
+      tx_next = frame[bitnum];
 
       if (baudtick) begin
         if (btick_cnt == OVERSAMPLING -1) begin
-          btick_cnt_next <= 0;
+          btick_cnt_next = 0;
           if (bitnum == 9) begin
-            state_next <= st_idle;
-            TX_DONE_O <= 1;
+            state_next = st_idle;
+            TX_DONE_O = 1;
           end
           else begin
-            bitnum_next <= bitnum  + 1;
+            bitnum_next = bitnum  + 1;
           end
         end // if (btick_cnt == OVERSAMPLING -1)
         else begin
-          btick_cnt_next <= btick_cnt + 1;
+          btick_cnt_next = btick_cnt + 1;
         end // else: !if(btick_cnt == OVERSAMPLING -1)
       end // if (baudtick)
     end // if (state == st_send)

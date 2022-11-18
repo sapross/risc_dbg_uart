@@ -128,7 +128,7 @@ module DMI_UART (/*AUTOARG*/
 
         st_read: begin
           // DMI_O is in the correct state by default.
-          fsm_next.state <= st_wait_ack;
+          fsm_next.state = st_wait_ack;
         end
 
         st_write: begin

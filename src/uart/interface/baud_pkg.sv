@@ -12,13 +12,7 @@ package baud_pkg;
   localparam integer ovsamp_rate = 8;
 
   function automatic integer bddiv ( integer hz, integer baudrate );
-    assert (hz > ovsamp_rate * baudrate)
-      else
-        $error("Baudrate must be smaller than Clock Rate / ovsamp_rate!");
-    if (hz > ovsamp_rate*baudrate) begin
-      return (hz/(ovsamp_rate*baudrate));
-    end
-    return 1;
+    return (hz/(ovsamp_rate*baudrate));
   endfunction // bddiv
 
   function automatic integer ovsamp( integer hz );

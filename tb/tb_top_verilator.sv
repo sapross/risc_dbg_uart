@@ -251,21 +251,20 @@ module tb_top_verilator #(
     );
  -----/\----- EXCLUDED -----/\----- */
 
-uart_dtm #(
+DTM_UART #(
            .CLK_RATE  ( 50 * 10 **6 ),
-           .BAUD_RATE ( 3 * 10 **6  ),
-           .DMI_ABITS ( 5           )
+           .BAUD_RATE ( 3 * 10 **6  )
            ) i_uart_dtm (
-           .CLK                  ( clk_i                 ),
-           .RST                  ( !rst_ni               ),
+           .CLK_I                ( clk_i              ),
+           .RST_NI               ( rst_ni             ),
+           .RX_I                 ( uart_rx            ),
+           .TX_O                 ( uart_tx            ),
            .DMI_REQ_VALID_O      ( dtm_req_valid      ),
-           .DMI_REQ_READY_I      ( debug_req_ready      ),
+           .DMI_REQ_READY_I      ( debug_req_ready    ),
            .DMI_REQ_O            ( dtm_req            ),
            .DMI_RESP_VALID_I     ( dtm_resp_valid     ),
            .DMI_RESP_READY_O     ( dtm_resp_ready     ),
-           .DMI_RESP_I           ( debug_resp           ),
-           .RXD_DEBUG            ( uart_rx ),
-           .TXD_DEBUG            ( uart_tx )
+           .DMI_RESP_I           ( debug_resp         )
 );
     dm_top #(
        .NrHarts           ( NrHarts           ),

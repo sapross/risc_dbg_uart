@@ -81,7 +81,7 @@ RTLSRC_FPNEW_PKG	:= fpnew/src/fpnew_pkg.sv
 RTLSRC_RISCV_PKG	+= $(addprefix riscv/rtl/include/,\
 				cv32e40p_apu_core_pkg.sv cv32e40p_pkg.sv \
 				../../bhv/include/cv32e40p_tracer_pkg.sv)
-RTLSRC_DM_PKG		+= ../src/dm_pkg.sv ../src/uart/baudPack.vhd ../src/uart/uart_pkg.vhd
+RTLSRC_DM_PKG		+= ../src/dm_pkg.sv ../src/uart/uart_pkg.sv ../src/uart/interface/baud_pkg.sv
 
 RTLSRC_PKG 		= $(RTLSRC_FPNEW_PKG) dm_tb_pkg.sv $(RTLSRC_RISCV_PKG) $(RTLSRC_DM_PKG)
 RTLSRC_RISCV		:= $(addprefix riscv/rtl/,\
@@ -123,11 +123,10 @@ RTLSRC_DEBUG		+= $(addprefix ../src/,\
 				dmi_jtag_tap.sv dm_mem.sv \
 				dm_sba.sv dm_top.sv dm_obi_top.sv)
 RTLSRC_DEBUG		+= $(addprefix ../src/uart/,\
-				uart_dtm.vhd \
-				uart.vhd baudgen.vhd fifo.vhd \
-				uart_rx.vhd uart_tx.vhd \
-				dmi_uart_tap.vhd de-serializer.vhd \
-				dmi_uart.vhd)
+				dtm_uart.sv \
+				interface/uart.sv interface/fifo.sv interface/uart_rx.sv interface/uart_tx.sv \
+				dmi_uart_tap.sv de-serializer.sv \
+				dmi_uart.sv)
 
 RTLSRC			+= $(RTLSRC_RISCV) $(RTLSRC_COMMON) $(RTLSRC_TECH) $(RTLSRC_DEBUG)
 
