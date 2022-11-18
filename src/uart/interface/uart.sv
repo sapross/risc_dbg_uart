@@ -26,12 +26,11 @@ module UART #(
    output logic [7:0] DREC_O
 ) ;
 
-  logic               baudtick;
   logic               tx_start;
   logic               rx_rd, rx_wr;
   logic               tx_rd, tx_wr;
   logic [7:0]         rx_din, rx_dout;
-  logic [7:0]         tx_din, tx_dout;
+  logic [7:0]         tx_dout;
   logic               tx_full;
   logic               tx_empty;
 
@@ -58,8 +57,8 @@ module UART #(
             .WE_I     ( rx_wr      ),
             .W_DATA_I ( rx_din     ),
             .R_DATA_O ( rx_dout    ),
-            .FULL_O   ( RX_EMPTY_O ),
-            .EMPTY_O  ( RX_FULL_O  )
+            .FULL_O   ( RX_FULL_O ),
+            .EMPTY_O  ( RX_EMPTY_O  )
              );
 
  // TX half of the interface
@@ -88,7 +87,7 @@ module UART #(
              );
 
   always_ff @(posedge CLK_I) begin : WRITE
-    if (~RST_NI) begin
+    if (!RST_NI) begin
       tx_wr <= 0;
     end
     else begin

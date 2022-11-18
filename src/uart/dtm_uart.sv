@@ -29,8 +29,8 @@ module DTM_UART #(
   logic                                                 rx_empty;
   logic                                                 rx_full;
   logic                                                 re, we;
-  logic                                                 dsend;
-  logic                                                 drec;
+  logic [7:0]                                           dsend;
+  logic [7:0]                                           drec;
   logic                                                 tx_ready;
 
   // DMI specific signals

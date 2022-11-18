@@ -22,7 +22,7 @@ parameter integer DBITS = 8
 );
   typedef logic [DBITS-1:0] dtype;
   typedef logic [ABITS-1:0] atype;
-  dtype [2**ABITS-1:0] ram;
+  dtype [2**ABITS-1:0] ram = '{ default: '0};
 
   typedef bit [ABITS-1:0]   ptype;
 
@@ -57,7 +57,7 @@ parameter integer DBITS = 8
       w_ptr <= 0;
       r_ptr <= 0;
       full <= 0;
-      empty <= 0;
+      empty <= 1;
     end else begin
       w_ptr <= w_ptr_next;
       r_ptr <= r_ptr_next;
