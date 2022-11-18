@@ -31,8 +31,8 @@ package uart_pkg;
                                                 ADDR_DMI = 5'b10001
                                                 } addr_e;
   localparam integer      ABITS = 7;
-  // localparam integer DMI_REQ_LENGTH = 41;
-  // localparam integer DMI_RESP_LENGTH = 34;
+  const integer DMI_REQ_LENGTH = 41;
+  const integer DMI_RESP_LENGTH = 34;
 
   typedef enum logic [1:0] {
     DMINoError = 2'h0, DMIReservedError = 2'h1,

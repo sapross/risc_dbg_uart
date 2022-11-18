@@ -6,7 +6,7 @@
  */
 import uart_pkg::*;
 
-module dmi_uart_tap #(
+module DMI_UART_TAP #(
                       parameter int CLK_RATE = 100000000,
                       parameter int BAUD_RATE = 3*10**6
                       )(
@@ -407,4 +407,4 @@ module dmi_uart_tap #(
     endcase // case (fsm.state)
   end // block: FSM
 
-endmodule : dmi_uart_tap
+endmodule : DMI_UART_TAP
