@@ -34,7 +34,7 @@ module UART_RX #(
   assign DATA_O = data;
   assign RX_DONE_O = valid;
   // assign RX_BRK_O = brk;
-
+  /* verilator lint_off WIDTH */
   localparam integer       OVERSAMPLING = ovsamp(CLK_RATE);
   localparam integer       BDDIVIDER = bddiv(CLK_RATE, BAUD_RATE);
   localparam integer       SAMPLE_INTERVAL = OVERSAMPLING * BDDIVIDER;

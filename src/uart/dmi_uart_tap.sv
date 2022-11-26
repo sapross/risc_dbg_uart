@@ -123,6 +123,7 @@ module DMI_UART_TAP #(
      ) ;
 
 
+  /* verilator lint_off WIDTH */
   always_ff @(posedge CLK_I) begin : TIMEOUT_COUNTER
     if ( !RST_NI || !run_timer(fsm.state, RX_EMPTY_I) ) begin
       msg_timer <= 0;
@@ -139,11 +140,11 @@ module DMI_UART_TAP #(
   always_ff @(posedge CLK_I) begin : FSM_CORE
     if ( !RST_NI ) begin
       // DTMCS register control.
-      dtmcs.zero1 = '0;
-      dtmcs.dmihardreset = 0;
-      dtmcs.dmireset = 0;
-      dtmcs.zero0 = 0;
-      dtmcs.idle = 3'b001;
+      dtmcs.zero1 <= '0;
+      dtmcs.dmihardreset <= 0;
+      dtmcs.dmireset <= 0;
+      dtmcs.zero0 <= 0;
+      dtmcs.idle <= 3'b001;
       dtmcs.dmistat <= DMINoError;
       dtmcs.abits <= $unsigned(ABITS);
       dtmcs.version <= 4'h01;

@@ -1,6 +1,6 @@
 // See LICENSE.SiFive for license details.
 //VCS coverage exclude_file
-import "DPI-C" function int uart_tick
+import "DPI-C" function void uart_tick
 (
  output bit uart_rx,
  input bit  uart_tx
@@ -54,8 +54,9 @@ module SimUART #(
          if (enable && init_done_sticky) begin
             tickCounterReg <= tickCounterNxt;
             if (tickCounterReg == 0) begin
-               __exit = uart_tick(__uart_tx,
-                                  __uart_rx);
+               uart_tick(__uart_rx,
+                         __uart_tx);
+              __exit = 0;
             end
          end // if (enable && init_done_sticky)
       end // else: !if(reset || r_reset)

@@ -15,6 +15,7 @@
 #
 # Author: Robert Balas (balasr@iis.ee.ethz.ch)
 
+
 CFLAGS          = -Wall -Wextra -Wno-missing-field-initializers \
 			-Wno-unused-function -Wno-missing-braces \
 			-O2 -g -march=native \
@@ -40,7 +41,7 @@ INCLUDE_DIRS    = ./
 LDFLAGS         = $(addprefix -L, $(LIB_DIRS))
 LDLIBS          = $(addprefix -l, $(LIBS))
 
-SRCS            = serial_console.cc
+SRCS            = serial_console.cc SimUART.cc
 OBJS            = $(SRCS:.cc=.o)
 INCLUDES        = $(addprefix -I, $(INCLUDE_DIRS))
 

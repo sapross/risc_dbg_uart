@@ -60,7 +60,6 @@ RTLSRC_TB_TOP		:= tb_top.sv
 RTLSRC_TB		:= boot_rom.sv \
 				dp_ram.sv \
 				mm_ram.sv \
-				SimJTAG.sv \
 				SimUART.sv \
 				../sva/dm_top_sva.sv \
 				../sva/dm_csrs_sva.sv \
@@ -71,7 +70,6 @@ RTLSRC_TB		:= boot_rom.sv \
 RTLSRC_VERI_TB          := boot_rom.sv \
 				dp_ram.sv \
 				mm_ram.sv \
-				SimJTAG.sv \
 				SimUART.sv \
 				tb_top_verilator.sv
 
@@ -204,7 +202,6 @@ verilate: testbench_verilator
 # librbs_veri.so as parameter doesn't work because it searches in the build
 # directory
 testbench_verilator: $(RTLSRC_VERI_TB) $(RTLSRC_PKG) $(RTLSRC) \
-			serial_console/librbs_veri.so \
 			serial_console/librbs_veri.so
 	$(VERILATOR) --cc --sv --exe $(VERI_TRACE) \
 		--Wno-lint --Wno-UNOPTFLAT --Wno-BLKANDNBLK \
@@ -212,8 +209,8 @@ testbench_verilator: $(RTLSRC_VERI_TB) $(RTLSRC_PKG) $(RTLSRC) \
 		tb_top_verilator --Mdir $(VERI_DIR) \
 		-CFLAGS "-std=gnu++11 $(VERI_CFLAGS)" $(VERI_COMPILE_FLAGS) \
 		$(RTLSRC_PKG) $(RTLSRC_VERI_TB) $(RTLSRC) \
-		-LDFLAGS "-L../serial_console -L../serial_console \
-		-Wl,--enable-new-dtags -Wl,-rpath,serial_console,serial_console -lrbs_veri" \
+		-LDFLAGS "-L../serial_console  \
+		-Wl,--enable-new-dtags -Wl,-rpath,serial_console -lrbs_veri" \
 		tb_top_verilator.cpp
 	cd $(VERI_DIR) && $(MAKE) -f Vtb_top_verilator.mk
 	cp $(VERI_DIR)/Vtb_top_verilator testbench_verilator
@@ -256,46 +253,28 @@ serial_console/librbs_vcs.so:
 	$(MAKE) -C serial_console all
 	mv serial_console/librbs.so $@
 
-# openocd server
-serial_console/librbs_veri.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
-serial_console/librbs_veri.so:
-	$(MAKE) -C serial_console all
-	mv serial_console/librbs.so $@
-
-serial_console/librbs_vsim.so: INCLUDE_DIRS =./ $(VSIM_HOME)/include
-serial_console/librbs_vsim.so:
-	$(MAKE) -C serial_console all
-	mv serial_console/librbs.so $@
-
-serial_console/librbs_vcs.so: INCLUDE_DIRS =./ $(VCS_HOME)/include
-serial_console/librbs_vcs.so:
-	$(MAKE) -C serial_console all
-	mv serial_console/librbs.so $@
-
 rbs-clean:
-	$(MAKE) -C serial_console clean
-	rm -rf serial_console/librbs_vsim.so serial_console/librbs_vcs.so
 	$(MAKE) -C serial_console clean
 	rm -rf serial_console/librbs_vsim.so serial_console/librbs_vcs.so
 
 # run tb and exit
 .PHONY: vsim-tb-run
 vsim-tb-run: ALL_VSIM_FLAGS += -c
-vsim-tb-run: vsim-all serial_console/librbs_vsim.so serial_console/librbs_vsim.so
+vsim-tb-run: vsim-all serial_console/librbs_vsim.so
 	$(VSIM) -work $(VWORK) $(ALL_VSIM_FLAGS) \
 	$(RTLSRC_VOPT_TB_TOP) -do 'source $(VSIM_SCRIPT_BATCH); exit -f'
 
 # run tb and drop into interactive shell
 .PHONY: vsim-tb-run-sh
 vsim-tb-run: ALL_VSIM_FLAGS += -c
-vsim-tb-run-sh: vsim-all serial_console/librbs_vsim.so serial_console/librbs_vsim.so
+vsim-tb-run-sh: vsim-all serial_console/librbs_vsim.so
 	$(VSIM) -work $(VWORK) $(ALL_VSIM_FLAGS) \
 	$(RTLSRC_VOPT_TB_TOP) -do $(VSIM_SCRIPT_BATCH)
 
 # run tb with simulator gui
 .PHONY: vsim-tb-run-gui
 vsim-tb-run-gui: ALL_VSIM_FLAGS += $(VSIM_GUI_FLAGS)
-vsim-tb-run-gui: vsim-all serial_console/librbs_vsim.so serial_console/librbs_vsim.so
+vsim-tb-run-gui: vsim-all serial_console/librbs_vsim.so
 	$(VSIM) -work $(VWORK) $(ALL_VSIM_FLAGS) \
 	$(RTLSRC_VOPT_TB_TOP) -do $(VSIM_SCRIPT_GUI)
 

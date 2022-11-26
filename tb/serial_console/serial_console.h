@@ -12,7 +12,7 @@ class serial_console_t
 {
   public:
     serial_console_t();
-    int tick(uint8_t *rx, uint8_t *tx);
+    int tick(uint8_t *rx, uint8_t tx);
     unsigned char done()
     {
         return quit;

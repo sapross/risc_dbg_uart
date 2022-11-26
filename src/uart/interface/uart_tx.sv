@@ -87,6 +87,7 @@ module UART_TX #(
         btick_cnt_next = 0;
         bitnum_next = 0;
         frame_next = {1'b1,DATA_I,1'b0};
+        state_next = st_send;
       end
 
     end // if (state == st_idle)
