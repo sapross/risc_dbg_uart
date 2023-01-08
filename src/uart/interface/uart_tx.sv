@@ -17,12 +17,12 @@ module UART_TX #(
                     input logic       RST_NI,
                     input logic       TX_START_I,
                     output logic      TX_DONE_O,
+                    input logic       channel,
+                    input logic       TX2_I,
                     output logic      TX_O,
                     input logic [7:0] DATA_I
                     ) ;
 
-  const integer                       OVERSAMPLING = ovsamp(CLK_RATE);
-  const integer                       BDDIVIDER = bddiv(CLK_RATE, BAUD_RATE);
 
   typedef enum                        logic {
                                              st_idle = 1'b0,
@@ -30,51 +30,78 @@ module UART_TX #(
                                              } state_t;
   state_t             state, state_next;
 
+  localparam integer unsigned SAMPLE_INTERVAL = CLK_RATE / BAUD_RATE;
+  localparam integer unsigned REMAINDER_INTERVAL = ((CLK_RATE*10) / BAUD_RATE) / 10;
+  bit [$clog2(SAMPLE_INTERVAL)-1:0] baud_count;
+  bit [$clog2(REMAINDER_INTERVAL)-1:0] sample_count;
+
+  logic               baudtick;
+  logic               wait_cycle;
+
+  logic               start_captured;
+
+  always_ff @(posedge CLK_I) begin : BAUD_GEN
+    if( !RST_NI || st_idle) begin
+      baudtick <= 0;
+      wait_cycle <= 0;
+      baud_count <= SAMPLE_INTERVAL/2 -1;
+      sample_count <= REMAINDER_INTERVAL-1;
+    end
+    else begin
+      // Count down baud_count and set baud_tick for one turn at zero.
+      // Each baud_tick sample_count is also decremented with
+      // baud_tick and counter resets delayed by one cycle.
+      // Purpose of the delay is to deal with phase deviations
+      // introduced by integer division of frequencies.
+      baudtick <= 0;
+      if(!wait_cycle) begin
+        if (baud_count > 0) begin
+          baud_count <= baud_count - 1;
+        end
+        else begin
+          if (sample_count > 0) begin
+            baudtick <= 1;
+            baud_count <= SAMPLE_INTERVAL - 1;
+            sample_count <= sample_count - 1;
+          end
+          else begin
+            wait_cycle <= 1;
+          end
+        end
+      end
+      else begin
+        baudtick <= 1;
+        wait_cycle <= 0;
+        sample_count <= REMAINDER_INTERVAL - 1;
+        baud_count <= SAMPLE_INTERVAL - 1;
+      end
+    end
+  end // block: BAUD_GEN
+
   integer                             btick_cnt, btick_cnt_next; // Number of baud ticks.
   integer                             bitnum, bitnum_next; // Bit count
   logic [9:0]                         frame,  frame_next; // UART Frame
   logic                               tx, tx_next;
-  assign TX_O = tx;
 
-  logic                               baudtick;
-  integer                             baud_count;
-
-  always_ff @(posedge CLK_I) begin : BAUDGEN
-    baudtick <= 0;
-    if (~RST_NI) begin
-      baud_count <= 0;
-    end
-    else begin
-      if ( baud_count < BDDIVIDER - 1 ) begin
-        baud_count <= baud_count + 1;
-      end
-      else begin
-        baud_count <= 0;
-        baudtick <= 1;
-      end
-    end // else: !if(~RST_NI)
-  end // block: BAUDGEN
+  assign TX_O = (TX2_I && channel ) || (tx && !channel);
 
   always_ff @(posedge CLK_I) begin : FSM_CORE
-    if (~RST_NI) begin
+    if (!RST_NI || channel) begin
       state <= st_idle;
-      btick_cnt <= 0;
       bitnum <= 0;
       frame <= 0;
       tx <= 1;
     end
     else begin
       state <= state_next;
-      btick_cnt <= btick_cnt_next;
       bitnum <= bitnum_next;
       frame <= frame_next;
       tx <= tx_next;
-    end // else: !if(~RST_NI)
+    end // else: !if(!RST_NI)
   end // block: FSM_CORE
 
   always_comb begin : FSM
     state_next = state;
-    btick_cnt_next = btick_cnt;
     bitnum_next = bitnum;
     frame_next = frame;
     tx_next = tx;
@@ -95,21 +122,14 @@ module UART_TX #(
     else if (state == st_send) begin
       // Multiplex message into TX
       tx_next = frame[bitnum];
-
       if (baudtick) begin
-        if (btick_cnt == OVERSAMPLING -1) begin
-          btick_cnt_next = 0;
-          if (bitnum == 9) begin
-            state_next = st_idle;
-            TX_DONE_O = 1;
-          end
-          else begin
-            bitnum_next = bitnum  + 1;
-          end
-        end // if (btick_cnt == OVERSAMPLING -1)
+        if (bitnum == 9) begin
+          state_next = st_idle;
+          TX_DONE_O = 1;
+        end
         else begin
-          btick_cnt_next = btick_cnt + 1;
-        end // else: !if(btick_cnt == OVERSAMPLING -1)
+          bitnum_next = bitnum  + 1;
+        end
       end // if (baudtick)
     end // if (state == st_send)
   end // block: FSM
