@@ -8,8 +8,6 @@
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
 
-import baud_pkg::*;
-
 module UART_RX #(
               parameter integer CLK_RATE = 100*10**6,
               parameter integer BAUD_RATE = 115200
@@ -19,32 +17,14 @@ module UART_RX #(
    output logic       RX_DONE_O,
    // output logic       RX_BRK_O,
    input logic        RX_I,
+   output logic       RX2_O,
    output logic [7:0] DATA_O
 ) ;
-  typedef enum        {st_idle, st_start, st_data, st_stop} state_t;
-  state_t state, state_next;
 
   logic [2:0]         rx_buf;
   logic               rx, rx_prev;
-  logic [7:0]         data, data_next;
-  integer             nbit, nbit_next;
-  logic               valid;
-  logic               brk;
 
-  assign DATA_O = data;
-  assign RX_DONE_O = valid;
-  // assign RX_BRK_O = brk;
   /* verilator lint_off WIDTH */
-  localparam integer       OVERSAMPLING = ovsamp(CLK_RATE);
-  localparam integer       BDDIVIDER = bddiv(CLK_RATE, BAUD_RATE);
-  localparam integer       SAMPLE_INTERVAL = OVERSAMPLING * BDDIVIDER;
-
-
-  logic               baudtick;
-  bit [$clog2(SAMPLE_INTERVAL):0] baud_count, baud_interval;
-
-
-
   always_ff @(posedge CLK_I) begin : STABILIZE_RX
     if (!RST_NI) begin
       rx_buf <= '1;
@@ -58,73 +38,110 @@ module UART_RX #(
     end
   end // block: STABILIZE_RX
 
-  always_ff @(posedge CLK_I) begin : CLOCK_RECOVERY
-    if( !RST_NI || state == st_idle) begin
+
+  localparam integer unsigned SAMPLE_INTERVAL = CLK_RATE / BAUD_RATE;
+  localparam integer unsigned REMAINDER_INTERVAL = ((CLK_RATE*10) / BAUD_RATE) / 10;
+  bit [$clog2(SAMPLE_INTERVAL)-1:0] baud_count;
+  bit [$clog2(REMAINDER_INTERVAL)-1:0] sample_count;
+
+  logic               baudtick;
+  logic               wait_cycle;
+
+  logic               start_captured;
+
+  always_ff @(posedge CLK_I) begin : BAUD_GEN
+    if( !RST_NI || !start_captured) begin
       baudtick <= 0;
-      baud_count <= 0;
-      baud_interval <= SAMPLE_INTERVAL/2 -1;
+      wait_cycle <= 0;
+      baud_count <= SAMPLE_INTERVAL/2 -1;
+      sample_count <= REMAINDER_INTERVAL-1;
     end
     else begin
-      if (baud_count < baud_interval) begin
-        baud_count <= baud_count + 1;
-        baudtick <= 0;
-      end
-      else begin
-        baud_interval <= SAMPLE_INTERVAL - 1;
-        baud_count <= 0;
-        baudtick <= 1;
-      end
-      if( rx != rx_prev ) begin
-        baud_interval <= baud_interval - (OVERSAMPLING*BDDIVIDER/2 - baud_count);
-      end
-    end // else: !if(!RST_NI | state == st_idle)
-  end // block: CLOCK_RECOVERY
-
-
-  always_ff @(posedge CLK_I) begin : FSM_CORE
-    if (RST_NI==0) begin
-      state <= st_idle;
-      data <= '0;
-      nbit <= 0;
-    end
-    else begin
-      state <= state_next;
-      data <= data_next;
-      nbit <= nbit_next;
-    end
-  end
-
-  always_comb begin : FSM
-    state_next = state;
-    data_next = data;
-    nbit_next = nbit;
-    valid = 0;
-    brk = 0;
-    case ( state )
-      st_idle: begin
-        if ( ~rx & rx_prev ) begin
-          state_next = st_start;
+      // Count down baud_count and set baud_tick for one turn at zero.
+      // Each baud_tick sample_count is also decremented with
+      // baud_tick and counter resets delayed by one cycle.
+      // Purpose of the delay is to deal with phase deviations
+      // introduced by integer division of frequencies.
+      baudtick <= 0;
+      if(!wait_cycle) begin
+        if (baud_count > 0) begin
+          baud_count <= baud_count - 1;
         end
-      end
-      st_start : begin
-        if ( baudtick ) begin
-          state_next = st_data;
-        end
-      end
-      st_data : begin
-        if ( baudtick ) begin
-          nbit_next = nbit + 1;
-          data_next[nbit] = rx;
-          if(nbit >= 7) begin
-            nbit_next  = 0;
-            state_next = st_stop;
+        else begin
+          if (sample_count > 0) begin
+            baudtick <= 1;
+            baud_count <= SAMPLE_INTERVAL - 1;
+            sample_count <= sample_count - 1;
+          end
+          else begin
+            wait_cycle <= 1;
           end
         end
       end
-      st_stop : begin
-        state_next = st_idle;
-        valid = 1;
+      else begin
+        baudtick <= 1;
+        wait_cycle <= 0;
+        sample_count <= REMAINDER_INTERVAL - 1;
+        baud_count <= SAMPLE_INTERVAL - 1;
       end
-    endcase; // case ( state )
+    end
+  end // block: BAUD_GEN
+
+  logic [9:0] uart_frame;
+  bit [$clog2(10):0] bit_count;
+  logic              channel;
+
+  always_ff @(posedge CLK_I) begin : CAPTURE_FRAME
+    if (!RST_NI) begin
+      uart_frame <= '1;
+      start_captured <= 0;
+      bit_count <= 9;
+      RX_DONE_O <= 0;
+
+    end
+    else begin
+      RX_DONE_O <= 0;
+      if(!start_captured) begin
+          // Falling edge detected.
+          if (rx_prev & ~rx) begin
+            start_captured = 1;
+          end
+      end
+      else begin
+        if (baudtick) begin
+          uart_frame <= {rx, uart_frame[8:1]};
+          if (bit_count > 0) begin
+            bit_count++;
+          end
+          else begin
+            bit_count <= 9;
+            start_captured <= 0;
+            // Is the received frame valid?
+            if (!uart_frame[0] & uart_frame[9]) begin
+              channel = 0;
+              DATA_O <= uart_frame[8:1];
+              RX_DONE_O <= 1;
+            end
+            else begin
+              channel = 1;
+            end
+          end
+        end
+      end
+    end
+  end
+
+  always_comb begin : RX_OUT
+    if (!RST_NI) begin
+      RX2_O = 1;
+    end
+    else begin
+      if (channel) begin
+        RX2_O = 1;
+      end
+      else begin
+        RX2_O = uart_frame[0];
+      end
+    end
   end
 endmodule // UART_RX
