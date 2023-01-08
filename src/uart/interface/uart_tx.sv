@@ -17,7 +17,7 @@ module UART_TX #(
                     input logic       RST_NI,
                     input logic       TX_START_I,
                     output logic      TX_DONE_O,
-                    input logic       channel,
+                    input logic       CHANNEL_I,
                     input logic       TX2_I,
                     output logic      TX_O,
                     input logic [7:0] DATA_I
@@ -83,10 +83,10 @@ module UART_TX #(
   logic [9:0]                         frame,  frame_next; // UART Frame
   logic                               tx, tx_next;
 
-  assign TX_O = (TX2_I && channel ) || (tx && !channel);
+  assign TX_O = (TX2_I && CHANNEL_I ) || (tx && !CHANNEL_I);
 
   always_ff @(posedge CLK_I) begin : FSM_CORE
-    if (!RST_NI || channel) begin
+    if (!RST_NI || CHANNEL_I) begin
       state <= st_idle;
       bitnum <= 0;
       frame <= 0;

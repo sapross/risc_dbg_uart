@@ -15,16 +15,24 @@ module UART #(
 ) (
    input logic        CLK_I,
    input logic        RST_NI,
-   input logic        RE_I,
+
    input logic        WE_I,
+   input logic [7:0]  DSEND_I,
+
+   input logic        RE_I,
+   output logic [7:0] DREC_O,
+
    input logic        RX_I,
+   output logic       RX2_O,
    output logic       TX_O,
+   input logic        TX2_I;
    output logic       TX_READY_O,
    output logic       RX_EMPTY_O,
    output logic       RX_FULL_O,
-   input logic [7:0]  DSEND_I,
-   output logic [7:0] DREC_O
-) ;
+
+   input logic        SW_CHANNEL_I,
+   output logic       CHANNEL_O
+);
 
   logic               tx_start;
   logic               rx_rd, rx_wr;
@@ -34,6 +42,11 @@ module UART #(
   logic               tx_full;
   logic               tx_empty;
 
+  logic               channel;
+  logic               rx_channel;
+  logic               switch_channel;
+
+  assign switch_channel = SW_CHANNEL_I;
   assign tx_start = ~tx_empty;
   assign TX_READY_O = ~tx_full;
 
@@ -47,7 +60,9 @@ module UART #(
      .RST_NI    ( RST_NI ),
      .RX_DONE_O ( rx_wr  ),
      .RX_I      ( RX_I   ),
-     .DATA_O    ( rx_din )
+     .RX2_O     ( RX2_O  ),
+     .DATA_O    ( rx_din ),
+     .CHANNEL_O ( rx_channel)
      );
 
   SIMPLE_FIFO FIFO_RX ( /*AUTOINST*/
@@ -71,8 +86,10 @@ module UART #(
      .RST_NI     ( RST_NI   ),
      .TX_START_I ( tx_start ),
      .TX_DONE_O  ( tx_rd    ),
+     .TX2_I      ( TX2_I    ),
      .TX_O       ( TX_O     ),
-     .DATA_I     ( tx_dout  )
+     .DATA_I     ( tx_dout  ),
+     .CHANNEL_I  ( channel  )
      );
 
   SIMPLE_FIFO FIFO_TX ( /*AUTOINST*/
@@ -85,6 +102,21 @@ module UART #(
             .FULL_O   ( tx_full  ),
             .EMPTY_O  ( tx_empty )
              );
+
+  always_ff @(posedge CLK_I) begin : CHANGE_CHANNEL
+    if (!RST_NI) begin
+      channel <= 0;
+    end
+    else begin
+      if (rx_channel || switch_channel) begin
+        channel <= 1;
+      end
+      else begin
+        channel <= 0;
+      end
+    end
+  end
+
 
   always_ff @(posedge CLK_I) begin : WRITE
     if (!RST_NI) begin

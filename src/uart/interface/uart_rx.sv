@@ -18,7 +18,8 @@ module UART_RX #(
    // output logic       RX_BRK_O,
    input logic        RX_I,
    output logic       RX2_O,
-   output logic [7:0] DATA_O
+   output logic [7:0] DATA_O,
+   output logic       CHANNEL_O
 ) ;
 
   logic [2:0]         rx_buf;
@@ -90,6 +91,7 @@ module UART_RX #(
   logic [9:0] uart_frame;
   bit [$clog2(10):0] bit_count;
   logic              channel;
+  assign CHANNEL_O = channel;
 
   always_ff @(posedge CLK_I) begin : CAPTURE_FRAME
     if (!RST_NI) begin
