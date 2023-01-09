@@ -8,7 +8,7 @@
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
 
-import dm::*;
+// import dm::*;
 
 package uart_pkg;
   localparam integer IRLENGTH = 5;

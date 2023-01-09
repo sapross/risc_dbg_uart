@@ -25,7 +25,7 @@ module UART #(
    input logic        RX_I,
    output logic       RX2_O,
    output logic       TX_O,
-   input logic        TX2_I;
+   input logic        TX2_I,
    output logic       TX_READY_O,
    output logic       RX_EMPTY_O,
    output logic       RX_FULL_O,

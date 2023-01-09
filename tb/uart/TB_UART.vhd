@@ -22,8 +22,8 @@ architecture TB of TB_UART is
 
   constant BAUD_RATE                     : integer := 3 * 10 ** 6;    -- Hz
   constant BAUD_PERIOD                   : time    := 333 ns;         -- ns;
-  constant CLK_RATE                      : integer := 100 * 10 ** 6;   -- Hz
-  constant CLK_PERIOD                    : time    := 10 ns;          -- ns;
+  constant CLK_RATE                      : integer := 25 * 10 ** 6;   -- Hz
+  constant CLK_PERIOD                    : time    := 40 ns;          -- ns;
 
   signal clk                             : std_logic;
   signal rst_i                           : std_logic;
@@ -31,10 +31,15 @@ architecture TB of TB_UART is
 
   signal rxd                             : std_logic;
   signal txd                             : std_logic;
+  signal rxd2                            : std_logic;
+  signal txd2                            : std_logic;
   signal sys_clk                         : std_logic;
   signal pll_locked                      : std_logic;
   signal we,           re                : std_logic;
-
+  
+  signal channel                         : std_logic;
+  signal sw_channel                      : std_logic;
+  
   signal tx_ready                        : std_logic;
   signal rx_empty,     rx_full           : std_logic;
 
@@ -184,16 +189,11 @@ begin
 
   end process RECEIVE;
 
-  CLK_WIZ_I : entity work.clk_wiz_0
-    port map (
-      CLK_IN1  => clk,
-      CLK_OUT1 => sys_clk,
-      LOCKED   => pll_locked
-    );
+  sys_clk <= clk;
 
   DUT : entity work.uart
     generic map (
-      CLK_RATE  => 25* 10**6,
+      CLK_RATE  => CLK_RATE,
       BAUD_RATE => BAUD_RATE
     )
     port map (
@@ -203,11 +203,15 @@ begin
       WE_I       => we,
       RX_I       => rxd,
       TX_O       => txd,
+      RX2_O       => rxd2,
+      TX2_I       => txd2,
       TX_READY_O => tx_ready,
       RX_EMPTY_O => rx_empty,
       RX_FULL_O  => rx_full,
       DSEND_I    => data_send,
-      DREC_O     => data_receive
+      DREC_O     => data_receive,
+      SW_CHANNEL_I => sw_channel,
+      CHANNEL_O    => channel
     );
 
   TRANSMIT : process (sys_clk) is
@@ -216,6 +220,7 @@ begin
     if rising_edge(sys_clk) then
       if (rst_ni = '0') then
         data_send <= (others => '0');
+        sw_channel <= '0';
         we <= '0';
         re <= '0';
       else

@@ -157,7 +157,7 @@ module DMI_UART_TAP #(
     end // if ( !RST_NI )
     else begin
       fsm <= fsm_next;
-      // DTMCS transistions. Not all bits are writeable.
+      // DTMCS transitions. Not all bits are writeable.
       dtmcs.dmihardreset <= dtmcs_next.dmihardreset;
       dtmcs.dmireset <= dtmcs_next.dmireset;
       dtmcs.idle <= dtmcs_next.idle;

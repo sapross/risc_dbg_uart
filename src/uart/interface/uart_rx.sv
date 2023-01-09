@@ -41,17 +41,19 @@ module UART_RX #(
 
 
   localparam integer unsigned SAMPLE_INTERVAL = CLK_RATE / BAUD_RATE;
-  localparam integer unsigned REMAINDER_INTERVAL = ((CLK_RATE*10) / BAUD_RATE) / 10;
+  localparam integer unsigned REMAINDER_INTERVAL = (CLK_RATE % BAUD_RATE)*10 / BAUD_RATE;
   bit [$clog2(SAMPLE_INTERVAL)-1:0] baud_count;
   bit [$clog2(REMAINDER_INTERVAL)-1:0] sample_count;
 
   logic               baudtick;
   logic               wait_cycle;
 
-  logic               start_captured;
+  logic               rx_edge_detected;
+  logic               rx_finished;
+
 
   always_ff @(posedge CLK_I) begin : BAUD_GEN
-    if( !RST_NI || !start_captured) begin
+    if( !RST_NI || !rx_edge_detected) begin
       baudtick <= 0;
       wait_cycle <= 0;
       baud_count <= SAMPLE_INTERVAL/2 -1;
@@ -89,60 +91,67 @@ module UART_RX #(
   end // block: BAUD_GEN
 
   logic [9:0] uart_frame;
+  logic       rx_finished;
   bit [$clog2(10):0] bit_count;
   logic              channel;
   assign CHANNEL_O = channel;
-
   always_ff @(posedge CLK_I) begin : CAPTURE_FRAME
     if (!RST_NI) begin
       uart_frame <= '1;
-      start_captured <= 0;
+      rx_edge_detected <= 0;
       bit_count <= 9;
       RX_DONE_O <= 0;
-
+      channel <= 0;
+      rx_finished <= 0;
+      DATA_O <= '0;
     end
     else begin
       RX_DONE_O <= 0;
-      if(!start_captured) begin
+      if(!rx_edge_detected) begin
           // Falling edge detected.
           if (rx_prev & ~rx) begin
-            start_captured = 1;
+            rx_edge_detected <= 1;
           end
       end
       else begin
         if (baudtick) begin
-          uart_frame <= {rx, uart_frame[8:1]};
+          uart_frame <= {rx, uart_frame[9:1]};
           if (bit_count > 0) begin
-            bit_count++;
+            bit_count--;
           end
           else begin
             bit_count <= 9;
-            start_captured <= 0;
-            // Is the received frame valid?
-            if (!uart_frame[0] & uart_frame[9]) begin
-              channel = 0;
-              DATA_O <= uart_frame[8:1];
-              RX_DONE_O <= 1;
-            end
-            else begin
-              channel = 1;
-            end
+            rx_edge_detected <= 0;
+            rx_finished <= 1;
           end
         end
       end
+      if (rx_finished) begin
+        // Is the received frame valid?
+        rx_finished <= 0;
+        if (!uart_frame[0] & uart_frame[9]) begin
+          channel <= 0;
+          DATA_O <= uart_frame[8:1];
+          RX_DONE_O <= 1;
+        end
+        else begin
+          channel <= 1;
+        end
+      end
     end
-  end
+  end // block: CAPTURE_FRAME
+
 
   always_comb begin : RX_OUT
     if (!RST_NI) begin
-      RX2_O = 1;
+      RX2_O = 0;
     end
     else begin
       if (channel) begin
-        RX2_O = 1;
+        RX2_O = RX_I;
       end
       else begin
-        RX2_O = uart_frame[0];
+        RX2_O = 0;
       end
     end
   end
