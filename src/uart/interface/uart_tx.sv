@@ -11,12 +11,15 @@
 
 module UART_TX #(
                  parameter integer CLK_RATE = 100*10**6,
-                 parameter integer BAUD_RATE = 115200
+                 parameter integer BAUD_RATE = 115200,
+                 parameter integer ESC =8'hB1,
+                 parameter integer RESUME =8'h00
                  ) (
                     input logic       CLK_I,
                     input logic       RST_NI,
                     input logic       TX_START_I,
                     output logic      TX_DONE_O,
+                    input logic       SEND_PAUSE_I,
                     input logic       CHANNEL_I,
                     input logic       TX2_I,
                     output logic      TX_O,
@@ -38,7 +41,7 @@ module UART_TX #(
   logic               baudtick;
   logic               wait_cycle;
 
-  logic               start_captured;
+  logic               pausing, pausing_next;
 
   always_ff @(posedge CLK_I) begin : BAUD_GEN
     if( !RST_NI || st_idle) begin
@@ -91,12 +94,15 @@ module UART_TX #(
       bitnum <= 0;
       frame <= 0;
       tx <= 1;
+      pausing <= 0;
+
     end
     else begin
       state <= state_next;
       bitnum <= bitnum_next;
       frame <= frame_next;
       tx <= tx_next;
+      pausing <= pausing_next;
     end // else: !if(!RST_NI)
   end // block: FSM_CORE
 
@@ -106,11 +112,26 @@ module UART_TX #(
     frame_next = frame;
     tx_next = tx;
     TX_DONE_O = 0;
+    pausing_next = pausing;
 
     if (state == st_idle) begin
 
       tx_next = 1;
-      if (TX_START_I == 1) begin
+      if (SEND_PAUSE_I && !pausing) begin
+        pausing_next = 1;
+        btick_cnt_next = 0;
+        bitnum_next = 0;
+        frame_next = {1'b1,ESC,1'b0};
+        state_next = st_send;
+      end
+      else if (!SEND_PAUSE_I && pausing) begin
+        pausing_next = 0;
+        btick_cnt_next = 0;
+        bitnum_next = 0;
+        frame_next = {1'b1,RESUME,1'b0};
+        state_next = st_send;
+      end
+      else if (TX_START_I == 1) begin
         btick_cnt_next = 0;
         bitnum_next = 0;
         frame_next = {1'b1,DATA_I,1'b0};

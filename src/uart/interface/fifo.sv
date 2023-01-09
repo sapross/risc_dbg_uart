@@ -8,7 +8,7 @@
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
 module SIMPLE_FIFO #(
-parameter integer ABITS = 4,
+parameter integer ABITS = 1,
 parameter integer DBITS = 8
 )(
   input logic CLK_I,
