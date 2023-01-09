@@ -49,16 +49,30 @@ module DMI_UART (/*AUTOARG*/
                                                           st_reset
                                                           } state_t;
 
+  // DMI_JTAG (alongside OpenOCD) define a different dmi_req datatype.
+  // Requires conversion to the data-type defined in dm_pkg.
+  typedef struct packed {
+    logic [6:0]  addr;
+    logic [31:0] data;
+    logic [1:0]  op;
+  } dmi_t;
 
   // For easier state manipulation, dmi-request and -response are packed together.
   typedef struct                                         packed {
-    dmi_req_t dmi_req;
+    dmi_t dmi_req;
     dmi_resp_t dmi_resp;
     state_t state;
   } fsm_t;
 
   fsm_t fsm, fsm_next;
-  assign DMI_REQ_O = fsm.dmi_req;
+
+  // Convert the dmi_t to dmi_req_t.
+  dmi_req_t conv_req;
+  assign conv_req.addr = fsm.dmi_req.addr;
+  assign conv_req.data = fsm.dmi_req.data;
+  assign conv_req.op = dtm_op_e'(fsm.dmi_req.op);
+
+  assign DMI_REQ_O = conv_req;
 
   logic                                                  dmi_resp_ready;
   assign DMI_RESP_READY_O = dmi_resp_ready;
@@ -69,8 +83,8 @@ module DMI_UART (/*AUTOARG*/
   logic                                                  done;
   assign DONE_O = done;
 
-  dmi_req_t tap_dmi_req;
-  assign tap_dmi_req = DMI_I;
+  dmi_t tap_dmi_req;
+  assign tap_dmi_req = dmi_t'(DMI_I);
 
   // DMI-JTAG uses a different format to answer the TAP.
   typedef struct                                         packed {
