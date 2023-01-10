@@ -48,6 +48,7 @@ module UART #(
   logic               switch_channel;
   logic               send_pause;
   logic               rx_full;
+  logic               rx_half_full;
 
   assign RX_FULL_O= rx_full;
 
@@ -73,14 +74,15 @@ module UART #(
      );
 
   SIMPLE_FIFO FIFO_RX ( /*AUTOINST*/
-            .CLK_I    ( CLK_I      ),
-            .RST_NI   ( RST_NI     ),
-            .RE_I     ( rx_rd      ),
-            .WE_I     ( rx_wr      ),
-            .W_DATA_I ( rx_din     ),
-            .R_DATA_O ( rx_dout    ),
-            .FULL_O   ( rx_full ),
-            .EMPTY_O  ( RX_EMPTY_O  )
+            .CLK_I        ( CLK_I      ),
+            .RST_NI       ( RST_NI     ),
+            .RE_I         ( rx_rd      ),
+            .WE_I         ( rx_wr      ),
+            .W_DATA_I     ( rx_din     ),
+            .R_DATA_O     ( rx_dout    ),
+            .FULL_O       ( rx_full    ),
+            .HALF_FULL_O  ( rx_half_full    ),
+            .EMPTY_O      ( RX_EMPTY_O )
              );
 
  // TX half of the interface
@@ -89,27 +91,28 @@ module UART #(
             .BAUD_RATE ( BAUD_RATE )
             ) UART_TX_I
     (/*AUTOINST*/
-     .CLK_I      ( CLK_I    ),
-     .RST_NI     ( RST_NI   ),
-     .TX_START_I ( tx_start ),
-     .TX_DONE_O  ( tx_rd    ),
-     .TX2_I      ( TX2_I    ),
-     .TX_O       ( TX_O     ),
-     .DATA_I     ( tx_dout  ),
-     .SEND_PAUSE_I (rx_full),
-     .CHANNEL_I  ( channel  )
+     .CLK_I        ( CLK_I        ),
+     .RST_NI       ( RST_NI       ),
+     .TX_START_I   ( WE_I         ),
+     .TX_DONE_O    (              ),
+     .TX_BUSY_O    ( tx_busy      ),
+     .TX2_I        ( TX2_I        ),
+     .TX_O         ( TX_O         ),
+     .DATA_I       ( DSEND_I      ),
+     .SEND_PAUSE_I ( rx_half_full ),
+     .CHANNEL_I    ( channel      )
      );
 
-  SIMPLE_FIFO FIFO_TX ( /*AUTOINST*/
-            .CLK_I    ( CLK_I    ),
-            .RST_NI   ( RST_NI   ),
-            .RE_I     ( tx_rd    ),
-            .WE_I     ( WE_I     ),
-            .W_DATA_I ( DSEND_I  ),
-            .R_DATA_O ( tx_dout  ),
-            .FULL_O   ( tx_full  ),
-            .EMPTY_O  ( tx_empty )
-             );
+  // SIMPLE_FIFO FIFO_TX ( /*AUTOINST*/
+  //           .CLK_I    ( CLK_I    ),
+  //           .RST_NI   ( RST_NI   ),
+  //           .RE_I     ( tx_rd    ),
+  //           .WE_I     ( WE_I     ),
+  //           .W_DATA_I ( DSEND_I  ),
+  //           .R_DATA_O ( tx_dout  ),
+  //           .FULL_O   ( tx_full  ),
+  //           .EMPTY_O  ( tx_empty )
+  //            );
 
   always_ff @(posedge CLK_I) begin : CHANGE_CHANNEL
     if (!RST_NI) begin

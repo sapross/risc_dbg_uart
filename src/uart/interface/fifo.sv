@@ -8,7 +8,7 @@
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
 module SIMPLE_FIFO #(
-parameter integer ABITS = 1,
+parameter integer ABITS = 2,
 parameter integer DBITS = 8
 )(
   input logic CLK_I,
@@ -18,7 +18,8 @@ parameter integer DBITS = 8
   input logic [7:0] W_DATA_I,
   output logic [7:0] R_DATA_O,
   output logic FULL_O,
-  output logic EMPTY_O
+  output logic EMPTY_O,
+  output logic HALF_FULL_O
 );
   typedef logic [DBITS-1:0] dtype;
   typedef logic [ABITS-1:0] atype;
@@ -41,6 +42,10 @@ parameter integer DBITS = 8
   assign w_en = WE_I & ~full;
   assign FULL_O = full;
   assign EMPTY_O = empty;
+
+  ptype distance;
+  assign distance = (w_ptr > r_ptr ) ? (w_ptr - r_ptr) : (r_ptr - w_ptr);
+  assign HALF_FULL_O = distance >= 2**(ABITS-1) || full;
 
   always_ff @(posedge CLK_I) begin : PROC_WRITE
     if(w_en) begin

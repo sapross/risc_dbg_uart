@@ -19,6 +19,7 @@ module UART_TX #(
                     input logic       RST_NI,
                     input logic       TX_START_I,
                     output logic      TX_DONE_O,
+                    output logic      TX_BUSY_O,
                     input logic       SEND_PAUSE_I,
                     input logic       CHANNEL_I,
                     input logic       TX2_I,
@@ -32,6 +33,7 @@ module UART_TX #(
                                              st_send = 1'b1
                                              } state_t;
   state_t             state, state_next;
+  assign TX_BUSY_O = !st_idle;
 
   localparam integer unsigned SAMPLE_INTERVAL = CLK_RATE / BAUD_RATE;
   localparam integer unsigned REMAINDER_INTERVAL = ((CLK_RATE*10) / BAUD_RATE) / 10;
@@ -81,7 +83,6 @@ module UART_TX #(
     end
   end // block: BAUD_GEN
 
-  integer                             btick_cnt, btick_cnt_next; // Number of baud ticks.
   integer                             bitnum, bitnum_next; // Bit count
   logic [9:0]                         frame,  frame_next; // UART Frame
   logic                               tx, tx_next;
@@ -119,20 +120,17 @@ module UART_TX #(
       tx_next = 1;
       if (SEND_PAUSE_I && !pausing) begin
         pausing_next = 1;
-        btick_cnt_next = 0;
         bitnum_next = 0;
         frame_next = {1'b1,ESC,1'b0};
         state_next = st_send;
       end
       else if (!SEND_PAUSE_I && pausing) begin
         pausing_next = 0;
-        btick_cnt_next = 0;
         bitnum_next = 0;
         frame_next = {1'b1,RESUME,1'b0};
         state_next = st_send;
       end
       else if (TX_START_I == 1) begin
-        btick_cnt_next = 0;
         bitnum_next = 0;
         frame_next = {1'b1,DATA_I,1'b0};
         state_next = st_send;
