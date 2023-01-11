@@ -33,7 +33,7 @@ module UART_TX #(
                                              st_send = 1'b1
                                              } state_t;
   state_t             state, state_next;
-  assign TX_BUSY_O = !st_idle;
+  assign TX_BUSY_O = state != st_idle;
 
   localparam integer unsigned SAMPLE_INTERVAL = CLK_RATE / BAUD_RATE;
   localparam integer unsigned REMAINDER_INTERVAL = ((CLK_RATE*10) / BAUD_RATE) / 10;
@@ -46,7 +46,7 @@ module UART_TX #(
   logic               pausing, pausing_next;
 
   always_ff @(posedge CLK_I) begin : BAUD_GEN
-    if( !RST_NI || st_idle) begin
+    if( !RST_NI || state == st_idle) begin
       baudtick <= 0;
       wait_cycle <= 0;
       baud_count <= SAMPLE_INTERVAL/2 -1;

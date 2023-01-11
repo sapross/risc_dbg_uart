@@ -9,14 +9,17 @@ import uart_pkg::*;
 
 module TAP_READ_INTERCONNECT
   #(
-    parameter integer unsigned READ_WIDTH = 32
+    parameter integer unsigned READ_WIDTH = 32,
+    parameter integer unsigned DMI_WIDTH = 41,
+    parameter integer unsigned STB_STATUS_WIDTH = 8,
+    parameter integer unsigned STB_DATA_WIDTH = 32
     )
   (
    input                              CLK_I,
    input                              RST_NI,
    // TAP signals
    input logic [IRLENGTH-1:0]         READ_ADDRESS_I,
-   input logic [READ_WIDTH-1:0]       READ_DATA_O,
+   output logic [READ_WIDTH-1:0]      READ_DATA_O,
    output logic                       READ_VALID_O,
    input logic                        READ_READY_I,
    output logic [IRLENGTH-1:0]        VALID_ADDRESS_O,
@@ -24,23 +27,23 @@ module TAP_READ_INTERCONNECT
    // Device signals
    output logic                       DMI_READ_READY_O,
    input logic                        DMI_READ_VALID_I,
-   input logic                        DMI_READ_DATA_I,
+   input logic [DMI_WIDTH-1:0]        DMI_READ_DATA_I,
 
    output logic                       STB0_STATUS_READY_O,
    input logic                        STB0_STATUS_VALID_I,
-   input logic [$bits(control_t)-1:0] STB0_STATUS_O,
+   input logic [STB_STATUS_WIDTH-1:0] STB0_STATUS_I,
 
    output logic                       STB0_DATA_READY_O,
    input logic                        STB0_DATA_VALID_I,
-   input logic [TRB_WIDTH-1:0]        STB0_DATA_I,
+   input logic [STB_DATA_WIDTH-1:0]   STB0_DATA_I,
 
    output logic                       STB1_STATUS_READY_O,
    input logic                        STB1_STATUS_VALID_I,
-   input logic [$bits(control_t)-1:0] STB1_STATUS_O,
+   input logic [STB_STATUS_WIDTH-1:0] STB1_STATUS_I,
 
    output logic                       STB1_DATA_READY_O,
    input logic                        STB1_DATA_VALID_I,
-   input logic [TRB_WIDTH-1:0]        STB1_DATA_I
+   input logic [STB_DATA_WIDTH-1:0]   STB1_DATA_I
    ) ;
 
   logic                               read_valid;
@@ -58,8 +61,6 @@ module TAP_READ_INTERCONNECT
     if(!RST_NI) begin
       read_valid <= 0;
       read_data <= '0;
-      return_address <= '0;
-      read_master <= 0;
     end
     else begin
       // Process read ready from Read-Arbiter.
@@ -67,28 +68,28 @@ module TAP_READ_INTERCONNECT
         case(READ_ADDRESS_I)
           ADDR_DMI: begin
             read_valid <= DMI_READ_VALID_I;
-            read_data[$bits(DMI_READ_DATA_I)-1:0] <= DMI_READ_DATA_I;
-            DMI_READ_READY_O <= read_ready;
+            read_data <= DMI_READ_DATA_I;
+            DMI_READ_READY_O <= READ_READY_I;
           end
           ADDR_STB0_CS: begin
             read_valid <= STB0_STATUS_VALID_I;
-            read_data[$bits(STB0_STATUS_DATA_I)-1:0] <= STB0_STATUS_I;
-            STB0_STATUS_READY_O <= read_ready;
+            read_data[$bits(STB0_STATUS_I)-1:0] <= STB0_STATUS_I;
+            STB0_STATUS_READY_O <= READ_READY_I;
           end
           ADDR_STB0_D: begin
             read_valid <= STB0_DATA_VALID_I;
             read_data[$bits(STB0_DATA_I)-1:0] <= STB0_DATA_I;
-            STB0_DATA_READY_O <= read_ready;
+            STB0_DATA_READY_O <= READ_READY_I;
           end
           ADDR_STB1_CS: begin
             read_valid <= STB1_STATUS_VALID_I;
-            read_data[$bits(STB1_STATUS_DATA_I)-1:0] <= STB1_STATUS_I;
-            STB1_STATUS_READY_O <= read_ready;
+            read_data[$bits(STB1_STATUS_I)-1:0] <= STB1_STATUS_I;
+            STB1_STATUS_READY_O <= READ_READY_I;
           end
           ADDR_STB1_D: begin
             read_valid <= STB1_DATA_VALID_I;
             read_data[$bits(STB1_DATA_I)-1:0] <= STB1_DATA_I;
-            STB0_DATA_READY_O <= read_ready;
+            STB0_DATA_READY_O <= READ_READY_I;
           end
           ADDR_IDCODE: begin
             read_valid <= 1;

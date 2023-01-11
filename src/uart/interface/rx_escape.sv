@@ -69,7 +69,7 @@ module RX_Escape
             data_next = DATA_REC_I;
 
             if (DATA_REC_I == ESC) begin
-              state_next = st_command;
+              state_next = st_escape;
             end
             else begin
               state_next = st_data;

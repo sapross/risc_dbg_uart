@@ -390,10 +390,10 @@ module DMI_UART_TAP_ASYNC
         if(VALID_ADDRESS_I != ADDR_NOP) begin
           if (VALID_ADDRESS_I != current_read_address) begin
             // Update local address and serializer length,
-            current_read_address <= read_address;
-            ser_length <= READ_LENGTHS[read_address];
+            current_read_address <= VALID_ADDRESS_I;
+            ser_length <= READ_LENGTHS[VALID_ADDRESS_I];
             // Notify TAP of changed read address.
-            COMMAND_O <= {3'b000, read_address};
+            COMMAND_O <= {3'b000, VALID_ADDRESS_I};
             send_command <= 1;
           end
           else begin

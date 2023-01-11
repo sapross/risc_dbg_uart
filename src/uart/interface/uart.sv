@@ -30,7 +30,6 @@ module UART #(
    output logic       RX_EMPTY_O,
    output logic       RX_FULL_O,
 
-
    input logic        SW_CHANNEL_I,
    output logic       CHANNEL_O
 );
@@ -54,8 +53,8 @@ module UART #(
 
 
   assign switch_channel = SW_CHANNEL_I;
-  assign tx_start = ~tx_empty;
-  assign TX_READY_O = ~tx_full;
+  assign tx_start = WE_I;
+  assign TX_READY_O = ~tx_busy;
   assign CHANNEL_O = channel;
 
  // RX half of the interface

@@ -14,11 +14,14 @@ module DMI_UART_TAP #(
                         input logic                         RST_NI ,
                         // UART-Interface connections
                         output logic                        RE_O,
-                        output logic                        WE_O,
-                        input logic                         TX_READY_I,
-                        input logic                         RX_EMPTY_I,
-                        output logic [7:0]                  DSEND_O,
                         input logic [7:0]                   DREC_I,
+                        input logic                         RX_EMPTY_I,
+                        input logic                         REC_COMMAND_I,
+
+                        output logic                        WE_O,
+                        output logic [7:0]                  DSEND_O,
+                        input logic                         TX_READY_I,
+                        output logic                        SEND_COMMAND_O,
 
                         //DM Reset signals
                         output logic                        DMI_HARD_RESET_O,
@@ -59,8 +62,8 @@ module DMI_UART_TAP #(
   // Debug Transport Module Control Register.
   dtmcs_t                          dtmcs, dtmcs_next;
   // UART-Interface Signals
-  logic                                                     we;
-  logic                                                     re;
+  logic                                                     write;
+  logic                                                     read;
   // DMI-Interface Signals
   // MAX_BYTES = ceil($bits(dmi_req_t)/8)
   localparam integer                                        MAX_BYTES = ($bits(dmi_req_t) + 7) / 8;
@@ -76,6 +79,9 @@ module DMI_UART_TAP #(
   logic [7:0]                                               ser_data_in;
   logic [8*MAX_BYTES-1:0]                                   ser_reg_in;
   logic [8*MAX_BYTES-1:0]                                   ser_reg_out;
+
+  logic                                                     ser_running;
+
 
   // Time Out timer to catch unfished operations.
   // Each UART-Frame takes 10 baud periods (1 Start + 8 Data + 1 Stop)
@@ -103,8 +109,8 @@ module DMI_UART_TAP #(
   assign DMI_READ_O = dmi_read;
   assign DMI_WRITE_O = dmi_write;
   assign DMI_O = fsm.dmi;
-  assign WE_O = we;
-  assign RE_O = re;
+  assign WE_O = write;
+  assign RE_O = read;
 
   DE_SERIALIZER #(
                   .MAX_BYTES( MAX_BYTES )
@@ -137,17 +143,11 @@ module DMI_UART_TAP #(
     end
   end // block: TIMEOUT_COUNTER
 
+
   always_ff @(posedge CLK_I) begin : FSM_CORE
     if ( !RST_NI ) begin
       // DTMCS register control.
-      dtmcs.zero1 <= '0;
-      dtmcs.dmihardreset <= 0;
-      dtmcs.dmireset <= 0;
-      dtmcs.zero0 <= 0;
-      dtmcs.idle <= 3'b001;
-      dtmcs.dmistat <= DMINoError;
-      dtmcs.abits <= $unsigned(ABITS);
-      dtmcs.version <= 4'h01;
+      dtmcs <= DTMCS_DEFAULT;
       // FSM state transitions.
       fsm.dmi <= '0;
       fsm.state <= st_idle;
@@ -176,8 +176,8 @@ module DMI_UART_TAP #(
     fsm_next = fsm;
     dtmcs_next = dtmcs;
     // UART-Interface
-    re = 0;
-    we = 0;
+    read = 0;
+    write = 0;
     // DMI-Interface
     dmi_read = 0;
     dmi_write = 0;
@@ -202,14 +202,14 @@ module DMI_UART_TAP #(
           fsm_next.state = st_reset;
         end
         else begin
-          fsm_next.state = st_header;
+          fsm_next.state = st_write;
         end
       end // case: st_idle
 
       st_header: begin
         // If RX-Fifo is not empty, read and check received byte for HEADER.
         if (RX_EMPTY_I == 0) begin
-          re = 1;
+          read = 1;
           // Is the byte from RX fifo equal to our header?
           if (DREC_I == HEADER) begin
             // If yes, proceed to CmdAddr.
@@ -222,7 +222,7 @@ module DMI_UART_TAP #(
         // If RX-Fifo is not empty, read and apply received byte to cmd and
         // address.
         if (RX_EMPTY_I == 0) begin
-          re = 1;
+          read = 1;
           // Decode into command and address.
           fsm_next.cmd = DREC_I[7:IRLENGTH];
           fsm_next.address = DREC_I[IRLENGTH-1:0];
@@ -238,7 +238,7 @@ module DMI_UART_TAP #(
         // If RX-Fifo is not empty, read and apply received byte to
         // data_length.
         if ( RX_EMPTY_I == 0 ) begin
-          re = 1;
+          read = 1;
           // Apply byte as unsigned integer to data_length.
           fsm_next.data_length  = DREC_I;
           // If address is to a dmi register, trigger waiting.
@@ -263,7 +263,7 @@ module DMI_UART_TAP #(
           endcase
         end // if ( RX_EMPTY_I == 0 )
         else begin
-          // Have we hit the message timeout? If yes, back to idle.
+          // Have write hit the message timeout? If yes, back to idle.
           if (timer_overflow == 1) begin
             fsm_next.state  = st_idle;
           end
@@ -275,16 +275,16 @@ module DMI_UART_TAP #(
         // De-/Serializer is active during this state.
         ser_reset = 1;
         // If serialization is not done...
-        // and we do not need to wait for dmi...
+        // and write do not need to wait for dmi...
         if (fsm.dmi_wait_read == 1) begin
-          // If we do have to wait for dmi...
+          // If write do have to wait for dmi...
           if (DMI_DONE_I == 0 && timer_overflow == 0) begin
             // ...tell dmi_handler to read...
             fsm_next.dmi_wait_read = 1;
             dmi_read               = 1;
           end
           else begin
-            //- ...otherwise we're done.
+            //- ...otherwise write'read done.
             fsm_next.dmi_wait_read = 0;
             dmi_read               = 0;
             fsm_next.dmi           = DMI_I;
@@ -292,10 +292,10 @@ module DMI_UART_TAP #(
         end // if (fsm.dmi_wait_read == 1)
         else begin
           // always write to TX if ready.
-          we      = TX_READY_I & ser_valid;
+          write      = TX_READY_I & ser_valid;
           ser_run = TX_READY_I;
           if (ser_done == 1) begin
-            // We are done sending if our serializer is done.
+            // write are done sending if our serializer is done.
             fsm_next.state = st_idle;
           end
         end // else: !if(fsm.dmi_wait_read == 1)
@@ -333,6 +333,8 @@ module DMI_UART_TAP #(
         // Deserialze bytes received over RX into addressed register.
         // De-/Serializer is active during this state.
         ser_reset = 1;
+
+
         if (timer_overflow == 1) begin
           // Message timeout is reached.
           fsm_next.state = st_idle;
@@ -342,17 +344,17 @@ module DMI_UART_TAP #(
           if (ser_done == 0) begin
             // Always read when rx-fifo is not empty:
             if (RX_EMPTY_I == 0) begin
-              re      = 1;
+              read      = 1;
               ser_run = 1;
             end
             else begin
-              re      = 0;
+              read      = 0;
               ser_run = 0;
             end
           end // if (ser_done == 0)
           else begin
             // Deserializing is done.
-            // Do we need to write to and wait for dmi?
+            // Do write need to write to and wait for dmi?
             if (fsm.dmi_wait_write == 1) begin
               // Is the dmi_handler done?
               if (DMI_DONE_I == 0) begin
@@ -365,7 +367,7 @@ module DMI_UART_TAP #(
               end
             end // if (fsm.dmi_wait_write = 1)
             else begin
-              // Either dmi write is done or we didn't need to wait for the
+              // Either dmi write is done or write didn't need to wait for the
               // handler anyway.
               fsm_next.state = st_idle;
             end

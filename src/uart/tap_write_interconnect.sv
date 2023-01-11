@@ -9,36 +9,39 @@ import uart_pkg::*;
 
 module TAP_WRITE_INTERCONNECT
   #(
-    parameter integer unsigned WRITE_WIDTH = 32
+    parameter integer unsigned WRITE_WIDTH = 32,
+    parameter integer unsigned DMI_WIDTH = 41,
+    parameter integer unsigned STB_CONTROL_WIDTH = 8,
+    parameter integer unsigned STB_DATA_WIDTH = 32
     )
   (
- input                               CLK_I,
- input                               RST_NI,
+ input                                CLK_I,
+ input                                RST_NI,
 
- input logic [IRLENGTH-1:0]          WRITE_ADDRESS_I,
- input logic [WRITE_WIDTH-1:0]       WRITE_DATA_I,
- input logic                         WRITE_VALID_I,
- output logic                        WRITE_READY_O,
+ input logic [IRLENGTH-1:0]           WRITE_ADDRESS_I,
+ input logic [WRITE_WIDTH-1:0]        WRITE_DATA_I,
+ input logic                          WRITE_VALID_I,
+ output logic                         WRITE_READY_O,
 
- input logic                         DMI_WRITE_READY_I,
- output logic                        DMI_WRITE_VALID_O,
- output logic                        DMI_WRITE_DATA_O,
+ input logic                          DMI_WRITE_READY_I,
+ output logic                         DMI_WRITE_VALID_O,
+ output logic [DMI_WIDTH-1:0]         DMI_WRITE_DATA_O,
 
- input logic                         STB0_CONTROL_READY_I,
- output logic                        STB0_CONTROL_VALID_O,
- output logic [$bits(control_t)-1:0] STB0_CONTROL_O,
+ input logic                          STB0_CONTROL_READY_I,
+ output logic                         STB0_CONTROL_VALID_O,
+ output logic [STB_CONTROL_WIDTH-1:0] STB0_CONTROL_O,
 
- input logic                         STB0_DATA_READY_I,
- output logic                        STB0_DATA_VALID_O,
- output logic [TRB_WIDTH-1:0]        STB0_DATA_O,
+ input logic                          STB0_DATA_READY_I,
+ output logic                         STB0_DATA_VALID_O,
+ output logic [STB_DATA_WIDTH-1:0]    STB0_DATA_O,
 
- input logic                         STB1_CONTROL_READY_I,
- output logic                        STB1_CONTROL_VALID_O,
- output logic [$bits(control_t)-1:0] STB1_CONTROL_O,
+ input logic                          STB1_CONTROL_READY_I,
+ output logic                         STB1_CONTROL_VALID_O,
+ output logic [STB_CONTROL_WIDTH-1:0] STB1_CONTROL_O,
 
- input logic                         STB1_DATA_READY_I,
- output logic                        STB1_DATA_VALID_O,
- output logic [TRB_WIDTH-1:0]        STB1_DATA_O
+ input logic                          STB1_DATA_READY_I,
+ output logic                         STB1_DATA_VALID_O,
+ output logic [STB_DATA_WIDTH-1:0]    STB1_DATA_O
    ) ;
 
   logic write_ready;
