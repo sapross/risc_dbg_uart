@@ -103,16 +103,6 @@ module UART #(
      .CHANNEL_I    ( channel      )
      );
 
-  // SIMPLE_FIFO FIFO_TX ( /*AUTOINST*/
-  //           .CLK_I    ( CLK_I    ),
-  //           .RST_NI   ( RST_NI   ),
-  //           .RE_I     ( tx_rd    ),
-  //           .WE_I     ( WE_I     ),
-  //           .W_DATA_I ( DSEND_I  ),
-  //           .R_DATA_O ( tx_dout  ),
-  //           .FULL_O   ( tx_full  ),
-  //           .EMPTY_O  ( tx_empty )
-  //            );
 
   always_ff @(posedge CLK_I) begin : CHANGE_CHANNEL
     if (!RST_NI) begin

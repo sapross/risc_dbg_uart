@@ -224,11 +224,13 @@ begin
         we <= '0';
         re <= '0';
       else
-        if (rx_empty = '0') then
+        if (rx_empty = '0' and dout = X"b1") then
           re <= '1';
+        else
+          re <= '0';
         end if;
         we <= re;
-        if (re = '1') then
+        if (re = '1' and rx_empty = '0') then
           data_send <= data_receive;
         end if;
       end if;

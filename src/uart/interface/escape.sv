@@ -24,11 +24,14 @@ module EscapeFilter
   input logic        TX_READY_I,
   output logic [7:0] DATA_SEND_O,
   output logic       WRITE_O,
+
    // Signals from/to TAP
-  output logic       CMD_REC_O,
   input logic        READ_I,
+  output logic       CMD_REC_O,
   output logic [7:0] DATA_REC_O,
+
   input logic        CMD_SEND_I,
+  input logic [7:0]  CMD_I,
   input logic        WRITE_I,
   input logic [7:0]  DATA_SEND_I,
 
@@ -50,14 +53,17 @@ module EscapeFilter
           );
   TX_Escape #(.ESC(ESC))
   tx_esc (
-          .CLK_I      (CLK_I),
-          .RST_NI     (RST),
-          .DATA_REC_I (DATA_REC_I),
-          .RX_EMPTY_I (RX_EMPTY_I),
-          .READ_O     (READ_O),
-          .READ_I     (READ_I),
-          .RX_EMPTY_O (RX_EMPTY_O),
-          .COMMAND_O  (CMD_REC_I),
-          .DATA_REC_O (DATA_REC_O)
+          .CLK_I            (CLK_I),
+          .RST_NI           (RST),
+
+          .TX_READY_I       (TX_READY_I),
+          .DATA_SEND_O      (DATA_SEND_O),
+          .WRITE_O          (WRITE_O),
+
+          .TX_READY_O       (TX_READY_O),
+          .DATA_SEND_I      (DATA_SEND_I),
+          .WRITE_I          (WRITE_I),
+          .WRITE_COMMAND_I  (CMD_SEND_I),
+          .COMMAND_I        (CMD_I)
           );
 endmodule // Escape

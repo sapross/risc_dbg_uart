@@ -24,7 +24,8 @@ module TX_Escape
    output logic       TX_READY_O,
    input logic [7:0]  DATA_SEND_I,
    input logic        WRITE_I,
-   input logic        COMMAND_I
+   input logic        WRITE_COMMAND_I,
+   input logic  [7:0] COMMAND_I
    );
 
 
@@ -38,20 +39,26 @@ module TX_Escape
       send_esc <= 0;
       send_data <= 0;
       data_buffer <= '0;
-      TX_READY_O <= 1;
+      TX_READY_O <= TX_READY_I;
     end
     else begin
       // Check if write data from tap needs to be
       // escaped or is explicitly a command.
-      if (WRITE_I) begin
+      if (WRITE_COMMAND_I) begin
+        data_buffer <= COMMAND_I;
+        send_data <= 1;
+        send_esc <= 1;
+        TX_READY_O <= 0;
+      end
+      else if (WRITE_I) begin
         data_buffer <= DATA_SEND_I;
         send_data <= 1;
-        if (DATA_SEND_I == ESC || COMMAND_I) begin
+        if (DATA_SEND_I == ESC ) begin
           TX_READY_O <= 0;
           send_esc <= 1;
         end
         else begin
-          TX_READY_O <= 1;
+          TX_READY_O <= TX_READY_I;
           send_esc <= 0;
         end
       end
@@ -68,8 +75,9 @@ module TX_Escape
           end
         end
       end
-    end
-  end
+
+    end // else: !if(!RST_NI)
+  end // always_ff @ (posedge CLK_I)
 
   always_comb begin
     if (RST_NI) begin
