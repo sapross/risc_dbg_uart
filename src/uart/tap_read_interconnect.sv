@@ -95,6 +95,10 @@ module TAP_READ_INTERCONNECT
             read_valid <= 1;
             read_data[$bits(IDCODEVALUE)-1:0] <= IDCODEVALUE;
           end
+          ADDR_DTMCS: begin
+            read_valid <= 1;
+            read_data[$bits(IDCODEVALUE)-1:0] <= DTMCS_DEFAULT;
+          end
 
 
           default: begin
