@@ -18,10 +18,14 @@ module DMI_UART (/*AUTOARG*/
                  input logic                         RST_NI,
 
                  // TAP Signals
-                 input logic                         TAP_READ_I,
-                 input logic                         TAP_WRITE_I,
-                 input logic [$bits(dmi_req_t)-1:0]  DMI_I,
+                 input logic                         DMI_READ_READY_I,
                  output logic [$bits(dmi_req_t)-1:0] DMI_O,
+                 output logic                        DMI_READ_VALID_O,
+
+                 output logic                        DMI_WRITE_READY_O,
+                 input logic                         DMI_WRITE_VALID_I,
+                 input logic [$bits(dmi_req_t)-1:0]  DMI_I,
+
                  output logic                        DONE_O,
                  input logic                         DMI_HARD_RESET_I,
 
@@ -134,6 +138,8 @@ module DMI_UART (/*AUTOARG*/
       dmi_req_valid = 0;
       done = 0;
 
+      DMI_WRITE_READY_O = 0;
+      DMI_READ_VALID_O = 0;
       case (fsm.state)
         st_idle: begin
           // Wait for request from TAP or goto reset state on reset signal.
@@ -143,10 +149,10 @@ module DMI_UART (/*AUTOARG*/
           else begin
             // Only the states read and write exist, triggered exclusively by the
             // corresponding input signals.
-            if (TAP_READ_I == 1 && TAP_WRITE_I == 0) begin
+            if (DMI_READ_READY_I == 1) begin
               fsm_next.state = st_read;
             end
-            else if (TAP_READ_I == 0 && TAP_WRITE_I == 1) begin
+            else if (DMI_WRITE_READY_I == 1) begin
               fsm_next.state = st_write;
             end
           end // else: !if(DMI_HARD_RESET_I == 1)
@@ -155,11 +161,13 @@ module DMI_UART (/*AUTOARG*/
         st_read: begin
           // DMI_O is in the correct state by default, therefore
           // only waiting for the ack from TAP remains.
+          DMI_READ_VALID_O = 1;
           fsm_next.state = st_wait_ack;
         end
 
         st_write: begin
           // Apply DMI-Request from the TAP to local variable.
+          DMI_WRITE_READY_O = 1;
           fsm_next.dmi_req = tap_dmi_req;
           // Determine, whether a dmi-write or -read command has been issued.
           if (tap_dmi_req.op == DTM_READ) begin
@@ -170,7 +178,7 @@ module DMI_UART (/*AUTOARG*/
           end
           else begin
             // Even if the command is invalid, we must wait for ack from TAP.
-            fsm_next.state = st_wait_ack;
+            fsm_next.state = st_idle;
           end
 
         end
@@ -214,8 +222,9 @@ module DMI_UART (/*AUTOARG*/
         st_wait_ack: begin
           // Signal TAP that we have finished command.
           done = 1;
-          if (TAP_WRITE_I == 0 && TAP_READ_I == 0) begin
-            // Lowering of both write and read inputs signifies ack.
+          if (DMI_READ_READY_I || DMI_WRITE_VALID_I) begin
+            DMI_READ_VALID_O <= DMI_READ_READ_I;
+            DMI_WRITE_READY_O <= DMI_WRITE_VALID_I;
             fsm_next.state = st_idle;
           end
         end
