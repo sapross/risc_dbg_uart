@@ -20,42 +20,46 @@ module TX_Escape
    input logic        TX_READY_I,
    output logic [7:0] DATA_SEND_O,
    output logic       WRITE_O,
+   output logic       ESC_DETECTED_O,
    // Signals from/to TAP
    output logic       TX_READY_O,
    input logic [7:0]  DATA_SEND_I,
    input logic        WRITE_I,
    input logic        WRITE_COMMAND_I,
-   input logic  [7:0] COMMAND_I
+
+   input logic [7:0]  COMMAND_I
    );
 
 
   logic [7:0]         data_buffer;
   logic               send_esc;
   logic               send_data ;
-
+  logic               buffered_tx_ready;
+  logic               tx_done;
+  assign tx_done = !buffered_tx_ready && TX_READY_I;
 
   always_ff @(posedge CLK_I) begin
     if (!RST_NI) begin
       send_esc <= 0;
       send_data <= 0;
       data_buffer <= '0;
-      TX_READY_O <= TX_READY_I;
+      WRITE_O <= 0;
+      buffered_tx_ready <= 0;
     end
     else begin
-      TX_READY_O <= TX_READY_I;
+      WRITE_O <= TX_READY_I && (send_esc || send_data);
+      buffered_tx_ready <= TX_READY_I;
       // Check if write data from tap needs to be
       // escaped or is explicitly a command.
       if (WRITE_COMMAND_I) begin
         data_buffer <= COMMAND_I;
         send_data <= 1;
         send_esc <= 1;
-        TX_READY_O <= 0;
       end
       else if (WRITE_I && (!send_data)) begin
         data_buffer <= DATA_SEND_I;
         send_data <= 1;
         if (DATA_SEND_I == ESC ) begin
-          TX_READY_O <= 0;
           send_esc <= 1;
         end
         else begin
@@ -65,7 +69,7 @@ module TX_Escape
       // When TX is ready, lower first send_esc
       // as the escape-sequence is transmitted before
       // data.
-      if (TX_READY_I) begin
+      if(tx_done) begin
         if (send_esc) begin
           send_esc <= 0;
         end
@@ -82,20 +86,22 @@ module TX_Escape
   always_comb begin
     if (!RST_NI) begin
       DATA_SEND_O = '0;
-      WRITE_O = 0;
+      ESC_DETECTED_O = 0;
+      TX_READY_O <= 0;
     end
     else begin
+      ESC_DETECTED_O = 0;
+      TX_READY_O = TX_READY_I;
+      DATA_SEND_O = '0;
+
       if (send_esc) begin
-        WRITE_O = 1;
+        TX_READY_O = 0;
         DATA_SEND_O = ESC;
+        ESC_DETECTED_O = 1;
       end
       else if (send_data) begin
-        WRITE_O = 1;
+        TX_READY_O = 0;
         DATA_SEND_O = data_buffer;
-      end
-      else begin
-        WRITE_O = 0;
-        DATA_SEND_O = '0;
       end
     end
   end

@@ -44,7 +44,7 @@ parameter integer DBITS = 8
   assign EMPTY_O = empty;
 
   ptype distance;
-  assign distance = (w_ptr > r_ptr ) ? (w_ptr - r_ptr) : (r_ptr - w_ptr);
+  assign distance = (w_ptr >= r_ptr ) ? (w_ptr - r_ptr) : 2**(ABITS-1) + (w_ptr + r_ptr);
   assign HALF_FULL_O = distance >= 2**(ABITS-1) || full;
 
   always_ff @(posedge CLK_I) begin : PROC_WRITE

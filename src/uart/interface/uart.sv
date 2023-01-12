@@ -18,6 +18,7 @@ module UART #(
 
    input logic        WE_I,
    input logic [7:0]  DSEND_I,
+   input logic        ESC_DETECTED_I,
 
    input logic        RE_I,
    output logic [7:0] DREC_O,
@@ -36,16 +37,12 @@ module UART #(
 
   logic               tx_start;
   logic               rx_rd, rx_wr;
-  logic               tx_rd, tx_wr;
+  logic               tx_wr;
   logic [7:0]         rx_din, rx_dout;
-  logic [7:0]         tx_dout;
-  logic               tx_full;
-  logic               tx_empty;
 
   logic               channel;
   logic               rx_channel;
   logic               switch_channel;
-  logic               send_pause;
   logic               rx_full;
   logic               rx_half_full;
 
@@ -73,16 +70,16 @@ module UART #(
      );
 
   SIMPLE_FIFO FIFO_RX ( /*AUTOINST*/
-            .CLK_I        ( CLK_I      ),
-            .RST_NI       ( RST_NI     ),
-            .RE_I         ( rx_rd      ),
-            .WE_I         ( rx_wr      ),
-            .W_DATA_I     ( rx_din     ),
-            .R_DATA_O     ( rx_dout    ),
-            .FULL_O       ( rx_full    ),
-            .HALF_FULL_O  ( rx_half_full    ),
-            .EMPTY_O      ( RX_EMPTY_O )
-             );
+                        .CLK_I        ( CLK_I      ),
+                        .RST_NI       ( RST_NI     ),
+                        .RE_I         ( RE_I      ),
+                        .WE_I         ( rx_wr      ),
+                        .W_DATA_I     ( rx_din     ),
+                        .R_DATA_O     ( DREC_O    ),
+                        .FULL_O       ( rx_full    ),
+                        .HALF_FULL_O  ( rx_half_full    ),
+                        .EMPTY_O      ( RX_EMPTY_O )
+                        );
 
  // TX half of the interface
   UART_TX #(
@@ -98,6 +95,7 @@ module UART #(
      .TX2_I        ( TX2_I        ),
      .TX_O         ( TX_O         ),
      .DATA_I       ( DSEND_I      ),
+     .ESC_DETECTED_I(ESC_DETECTED_I),
      .SEND_PAUSE_I ( rx_half_full ),
      .CHANNEL_I    ( channel      )
      );
@@ -114,25 +112,6 @@ module UART #(
       else begin
         channel <= 0;
       end
-    end
-  end
-
-
-  always_ff @(posedge CLK_I) begin : WRITE
-    if (!RST_NI) begin
-      tx_wr <= 0;
-    end
-    else begin
-      tx_wr <= WE_I;
-    end
-  end
-
-  always_comb begin : READ
-    rx_rd = RE_I;
-
-    DREC_O = '0;
-    if (RE_I) begin
-      DREC_O = rx_dout;
     end
   end
 

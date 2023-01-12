@@ -12,8 +12,8 @@
 module UART_TX #(
                  parameter integer CLK_RATE = 100*10**6,
                  parameter integer BAUD_RATE = 115200,
-                 parameter integer ESC =8'hB1,
-                 parameter integer RESUME =8'h00
+                 parameter logic [7:0] ESC =8'hB1,
+                 parameter logic [7:0] RESUME =8'h00
                  ) (
                     input logic       CLK_I,
                     input logic       RST_NI,
@@ -21,6 +21,7 @@ module UART_TX #(
                     output logic      TX_DONE_O,
                     output logic      TX_BUSY_O,
                     input logic       SEND_PAUSE_I,
+                    input logic       ESC_DETECTED_I,
                     input logic       CHANNEL_I,
                     input logic       TX2_I,
                     output logic      TX_O,
@@ -49,7 +50,7 @@ module UART_TX #(
     if( !RST_NI || state == st_idle) begin
       baudtick <= 0;
       wait_cycle <= 0;
-      baud_count <= SAMPLE_INTERVAL/2 -1;
+      baud_count <= SAMPLE_INTERVAL -1;
       sample_count <= REMAINDER_INTERVAL-1;
     end
     else begin
@@ -83,9 +84,10 @@ module UART_TX #(
     end
   end // block: BAUD_GEN
 
-  integer                             bitnum, bitnum_next; // Bit count
   logic [9:0]                         frame,  frame_next; // UART Frame
+  integer                             bitnum, bitnum_next; // Bit count
   logic                               tx, tx_next;
+  logic                               last_esc, last_esc_next;
 
   assign TX_O = (TX2_I && CHANNEL_I ) || (tx && !CHANNEL_I);
 
@@ -96,7 +98,7 @@ module UART_TX #(
       frame <= 0;
       tx <= 1;
       pausing <= 0;
-
+      last_esc <= 0;
     end
     else begin
       state <= state_next;
@@ -104,33 +106,43 @@ module UART_TX #(
       frame <= frame_next;
       tx <= tx_next;
       pausing <= pausing_next;
+      last_esc <= last_esc_next;
     end // else: !if(!RST_NI)
   end // block: FSM_CORE
 
   always_comb begin : FSM
+
     state_next = state;
     bitnum_next = bitnum;
     frame_next = frame;
     tx_next = tx;
     TX_DONE_O = 0;
     pausing_next = pausing;
+    last_esc_next <= last_esc;
 
     if (state == st_idle) begin
 
       tx_next = 1;
       if (SEND_PAUSE_I && !pausing) begin
         pausing_next = 1;
-        bitnum_next = 0;
-        frame_next = {1'b1,ESC,1'b0};
-        state_next = st_send;
+        // Avoid sending escape sequence if data send was escape seqeuence
+        if (!last_esc) begin
+          bitnum_next = 0;
+          frame_next = {1'b1,ESC,1'b0};
+          state_next = st_send;
+        end
       end
       else if (!SEND_PAUSE_I && pausing) begin
         pausing_next = 0;
-        bitnum_next = 0;
-        frame_next = {1'b1,RESUME,1'b0};
-        state_next = st_send;
+        // Simply resume sending if the last data send was escape.
+        if (!last_esc) begin
+          bitnum_next = 0;
+          frame_next = {1'b1,RESUME,1'b0};
+          state_next = st_send;
+        end
       end
       else if (TX_START_I == 1) begin
+        last_esc_next <= ESC_DETECTED_I;
         bitnum_next = 0;
         frame_next = {1'b1,DATA_I,1'b0};
         state_next = st_send;
