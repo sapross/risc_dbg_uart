@@ -73,6 +73,7 @@ module DTM_UART_Async
 
   logic                                rx_read;
   logic [7:0]                          rx_data;
+  logic                                esc_detected;
   logic                                uintf_empty;
   logic                                uintf_full;
 
@@ -93,6 +94,7 @@ module DTM_UART_Async
      .DSEND_I(tx_data),
      .RE_I(rx_read),
      .DREC_O(rx_data),
+     .ESC_DETECTED_I(esc_detected),
      .RX_I(RX_I),
      .RX2_O(RX2_O),
      .TX_O(TX_O),
@@ -138,6 +140,7 @@ module DTM_UART_Async
           .TX_READY_I       (uintf_ready && !channel),
           .DATA_SEND_O      (tx_data),
           .WRITE_O          (tx_write),
+          .ESC_DETECTED_O   (esc_detected),
 
           .TX_READY_O       (tap_tx_ready),
           .DATA_SEND_I      (tap_tx_data),

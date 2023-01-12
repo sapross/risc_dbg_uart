@@ -319,7 +319,7 @@ module DMI_UART_TAP_ASYNC
 
   logic                tx_write;
   assign tx_write = TX_READY_I && ser_run && !send_command;
-  assign WRITE_O = ser_run;
+  assign WRITE_O = tx_write;
 
   always_ff @(posedge CLK_I) begin : READ_ARBITER
     if (!RST_NI) begin
@@ -368,7 +368,7 @@ module DMI_UART_TAP_ASYNC
         // exactly once.
         if (!ser_done) begin
           READ_READY_O <= !ser_busy;
-          ser_run <= TX_READY_I && (READ_VALID_I || ser_busy);
+          ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
         end
         else begin
           ser_reset <= 1;
@@ -379,7 +379,7 @@ module DMI_UART_TAP_ASYNC
         // to CMD_NOP after one read.
         if (!ser_done) begin
           READ_READY_O <= !ser_busy;
-          ser_run <= TX_READY_I && (READ_VALID_I || ser_busy);
+          ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
         end
         else begin
           ser_reset <= 1;
@@ -399,7 +399,7 @@ module DMI_UART_TAP_ASYNC
           else begin
             if (!ser_done) begin
               READ_READY_O <= !ser_busy;
-              ser_run <= TX_READY_I && (READ_VALID_I || ser_busy);
+              ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
             end
             else begin
               ser_reset <= 1;
