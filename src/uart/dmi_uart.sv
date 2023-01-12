@@ -18,82 +18,47 @@ module DMI_UART (/*AUTOARG*/
                  input logic                         RST_NI,
 
                  // TAP Signals
-                 input logic                         DMI_READ_READY_I,
-                 output logic [$bits(dmi_req_t)-1:0] DMI_O,
-                 output logic                        DMI_READ_VALID_O,
+                 input logic                         TAP_READ_READY_I,
+                 output logic [$bits(dmi_req_t)-1:0] TAP_READ_DATA_O,
+                 output logic                        TAP_READ_VALID_O,
 
-                 output logic                        DMI_WRITE_READY_O,
-                 input logic                         DMI_WRITE_VALID_I,
-                 input logic [$bits(dmi_req_t)-1:0]  DMI_I,
-
-                 output logic                        DONE_O,
-                 input logic                         DMI_HARD_RESET_I,
+                 output logic                        TAP_WRITE_READY_O,
+                 input logic                         TAP_WRITE_VALID_I,
+                 input logic [$bits(dmi_req_t)-1:0]  TAP_WRITE_DATA_I,
 
                  // Ready/Valid Bus for DM
-                 input logic                         DMI_RESP_VALID_I,
                  output logic                        DMI_RESP_READY_O,
+                 input logic                         DMI_RESP_VALID_I,
                  input [$bits(dmi_resp_t)-1:0]       DMI_RESP_I,
 
-                 output logic                        DMI_REQ_VALID_O,
                  input logic                         DMI_REQ_READY_I,
-                 output [$bits(dmi_req_t)-1:0]       DMI_REQ_O,
-
-                 output logic                        DMI_RST_NO
+                 output logic                        DMI_REQ_VALID_O,
+                 output [$bits(dmi_req_t)-1:0]       DMI_REQ_O
                  ) ;
-
-  typedef enum                                           {
-                                                          st_idle,
-                                                          st_read,
-                                                          st_write,
-                                                          st_read_dmi,
-                                                          st_wait_read_dmi,
-                                                          st_write_dmi,
-                                                          st_wait_write_dmi,
-                                                          st_wait_ack,
-                                                          st_reset
-                                                          } state_t;
 
   // DMI_JTAG (alongside OpenOCD) define a different dmi_req datatype.
   // Requires conversion to the data-type defined in dm_pkg.
-  typedef struct packed {
-    logic [6:0]  addr;
-    logic [31:0] data;
-    logic [1:0]  op;
+  typedef struct                                     packed {
+    logic [6:0]                                      addr;
+    logic [31:0]                                     data;
+    logic [1:0]                                      op;
   } dmi_t;
+  dmi_t dmi_req;
 
-  // For easier state manipulation, dmi-request and -response are packed together.
-  typedef struct                                         packed {
-    dmi_t dmi_req;
-    dmi_resp_t dmi_resp;
-    state_t state;
-  } fsm_t;
-
-  fsm_t fsm, fsm_next;
-
-  // Convert the dmi_t to dmi_req_t.
   dmi_req_t conv_req;
-  assign conv_req.addr = fsm.dmi_req.addr;
-  assign conv_req.data = fsm.dmi_req.data;
-  assign conv_req.op = dtm_op_e'(fsm.dmi_req.op);
+  assign conv_req.addr = dmi_req.addr;
+  assign conv_req.data = dmi_req.data;
+  assign conv_req.op = dtm_op_e'(dmi_req.op);
 
   assign DMI_REQ_O = conv_req;
 
-  logic                                                  dmi_resp_ready;
-  assign DMI_RESP_READY_O = dmi_resp_ready;
-
-  logic                                                  dmi_req_valid;
-  assign DMI_REQ_VALID_O = dmi_req_valid;
-
-  logic                                                  done;
-  assign DONE_O = done;
-
   dmi_t tap_dmi_req;
-  assign tap_dmi_req = dmi_t'(DMI_I);
+  assign tap_dmi_req = dmi_t'(TAP_WRITE_DATA_I);
 
   // DMI-JTAG uses a different format to answer the TAP.
-  typedef struct                                         packed {
-    logic [6:0]                                          addr;
-    logic [31:0]                                         data;
+  typedef struct                                     packed {
+    logic [6:0]                                      addr;
+    logic [31:0]                                     data;
     dmi_error_e dmi_error;
   } tap_resp_t;
 
@@ -102,146 +67,86 @@ module DMI_UART (/*AUTOARG*/
   // - Response data
   // - 2-Bit error code.
   tap_resp_t tap_dmi_resp;
-  assign DMI_O = tap_dmi_resp;
-  assign tap_dmi_resp.addr = fsm.dmi_req.addr;
-  assign tap_dmi_resp.data = fsm.dmi_resp.data;
+
+  dmi_resp_t dmi_resp;
+  assign tap_dmi_resp.addr = dmi_req.addr;
+  assign tap_dmi_resp.data = dmi_resp.data;
   assign tap_dmi_resp.dmi_error = DMINoError;
 
-  // Passthrough of the hard reset signals from the TAP.
-  assign DMI_RST_NO = ~DMI_HARD_RESET_I;
+  assign TAP_READ_DATA_O = tap_dmi_resp;
 
-  // Synchronous state transitions.
-  always_ff @(posedge CLK_I) begin : FSM_CORE
-    if (!RST_NI) begin
-      fsm.state <= st_idle;
-      fsm.dmi_req <= '0;
-      fsm.dmi_resp <= '0;
+  logic                                              do_read;
+  logic                                              do_write;
+  logic                                              do_end;
+
+  assign DMI_REQ_VALID_O = do_read || do_write;
+
+  always_ff @(posedge CLK_I) begin : DMI_WRITE
+    if(!RST_NI) begin
+      TAP_WRITE_READY_O <= 0;
+      dmi_req <= '0;
+      dmi_resp <= '0;
+
+      do_read <= 0;
+      do_write <= 0;
+      do_end <= 0;
+
     end
     else begin
-      fsm <= fsm_next;
+      TAP_WRITE_READY_O <= 0;
+      if (do_end) begin
+        if (!TAP_WRITE_VALID_I) begin
+          do_end <= 0;
+        end
+      end
+      else if (do_read) begin
+        if (DMI_RESP_VALID_I) begin
+          do_read <= 0;
+          do_end <= 1;
+          dmi_resp <= DMI_RESP_I;
+        end
+      end
+      else if (do_write) begin
+        if(DMI_RESP_VALID_I) begin
+          do_write <= 0;
+          do_end <= 1;
+        end
+      end
+      else begin
+        if (TAP_WRITE_VALID_I) begin
+          TAP_WRITE_READY_O <= 1;
+          dmi_req <= tap_dmi_req;
+          if (tap_dmi_req.op == DTM_READ) begin
+            do_read <= 1;
+          end
+          else if (tap_dmi_req.op == DTM_WRITE) begin
+            do_write <= 1;
+          end
+        end
+      end
     end
   end
 
-  // Asynchronous next state evaluation.
-  always_comb begin : FSM
-    fsm_next = fsm;
-    if (!RST_NI) begin
-      fsm_next.state = st_idle;
-      dmi_resp_ready = 0;
-      dmi_req_valid = 0;
-      done = 0;
+  // TAP read process. As the data signals are valid all the time
+  // read requests are simply answered by setting valid to high.
+  always_ff @(posedge CLK_I) begin : TAP_READ
+    if(!RST_NI) begin
+      TAP_READ_VALID_O <= 0;
+      DMI_RESP_READY_O <= 0;
     end
     else begin
-      // We are always ready to receive a response from the DM.
-      // Requests are only valid if issued by the TAP.
-      dmi_resp_ready = 1;
-      dmi_req_valid = 0;
-      done = 0;
-
-      DMI_WRITE_READY_O = 0;
-      DMI_READ_VALID_O = 0;
-      case (fsm.state)
-        st_idle: begin
-          // Wait for request from TAP or goto reset state on reset signal.
-          if (DMI_HARD_RESET_I == 1) begin
-            fsm_next.state = st_reset;
-          end
-          else begin
-            // Only the states read and write exist, triggered exclusively by the
-            // corresponding input signals.
-            if (DMI_READ_READY_I == 1) begin
-              fsm_next.state = st_read;
-            end
-            else if (DMI_WRITE_READY_I == 1) begin
-              fsm_next.state = st_write;
-            end
-          end // else: !if(DMI_HARD_RESET_I == 1)
-        end // case: st_idle
-
-        st_read: begin
-          // DMI_O is in the correct state by default, therefore
-          // only waiting for the ack from TAP remains.
-          DMI_READ_VALID_O = 1;
-          fsm_next.state = st_wait_ack;
+      DMI_RESP_READY_O <= 1;
+      // Do not answer read requests by tap if there is an outstanding
+      // dmi operation.
+      if (!do_read && !do_write) begin
+        if (TAP_READ_READY_I) begin
+          TAP_READ_VALID_O <= 1;
         end
-
-        st_write: begin
-          // Apply DMI-Request from the TAP to local variable.
-          DMI_WRITE_READY_O = 1;
-          fsm_next.dmi_req = tap_dmi_req;
-          // Determine, whether a dmi-write or -read command has been issued.
-          if (tap_dmi_req.op == DTM_READ) begin
-            fsm_next.state = st_read_dmi;
-          end
-          else if (tap_dmi_req.op == DTM_WRITE) begin
-            fsm_next.state = st_write_dmi;
-          end
-          else begin
-            // Even if the command is invalid, we must wait for ack from TAP.
-            fsm_next.state = st_idle;
-          end
-
+        else begin
+          TAP_READ_VALID_O <= 0;
         end
-
-        st_read_dmi: begin
-          // DMI-request of the state machine has changed to the value from TAP.
-          // Request is now valid.
-          dmi_req_valid = 1;
-          // Wait until DM is ready to read.
-          if (DMI_REQ_READY_I == 1) begin
-            fsm_next.state = st_wait_read_dmi;
-          end
-        end
-
-        st_wait_read_dmi: begin
-          // Wait until response from DM is valid.
-          if (DMI_RESP_VALID_I == 1) begin
-            // Apply response to local register and wait for ack from TAP.
-            fsm_next.dmi_resp = DMI_RESP_I;
-            fsm_next.state = st_wait_ack;
-          end
-
-        end
-        st_write_dmi: begin
-          // Functionally equivalent to the st_read_dmi state. Only difference is the state following.
-          dmi_req_valid = 1;
-          if (DMI_REQ_READY_I == 1) begin
-            // Wait until DM is ready to read.
-            fsm_next.state = st_wait_write_dmi;
-          end
-        end
-
-        st_wait_write_dmi: begin
-          // Wait until response from DM is valid.
-          if (DMI_RESP_VALID_I == 1) begin
-            fsm_next.state = st_wait_ack;
-            // Unlike st_wait_read_dmi, response is not copied into local register.
-          end
-        end
-
-        st_wait_ack: begin
-          // Signal TAP that we have finished command.
-          done = 1;
-          if (DMI_READ_READY_I || DMI_WRITE_VALID_I) begin
-            DMI_READ_VALID_O <= DMI_READ_READ_I;
-            DMI_WRITE_READY_O <= DMI_WRITE_VALID_I;
-            fsm_next.state = st_idle;
-          end
-        end
-
-        st_reset: begin
-          // Reset local dmi-req and -resp registers.
-          fsm_next.state = st_idle;
-          fsm_next.dmi_req = '0;
-          fsm_next.dmi_resp = '0;
-        end
-
-        default : begin
-          fsm_next.state = st_idle;
-        end
-
-      endcase // case (fsm.state)
-    end // else: !if(!RST_NI)
-  end // block: FSM
+      end
+    end
+  end
 
 endmodule // DMI_UART
