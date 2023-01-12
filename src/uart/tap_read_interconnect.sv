@@ -57,7 +57,7 @@ module TAP_READ_INTERCONNECT
     STB0_DATA_READY_O  <= 0;
     STB1_STATUS_READY_O  <= 0;
     STB1_DATA_READY_O  <= 0;
-
+    VALID_ADDRESS_O <= ADDR_NOP;
     if(!RST_NI) begin
       read_valid <= 0;
       read_data <= '0;
@@ -124,7 +124,9 @@ module TAP_READ_INTERCONNECT
       else if (STB1_DATA_VALID_I) begin
         VALID_ADDRESS_O <= ADDR_STB1_D;
       end
-
+      else begin
+        VALID_ADDRESS_O <= ADDR_NOP;
+      end
     end
   end
 endmodule // TAP_READ_INTERCONNECT
