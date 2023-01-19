@@ -71,7 +71,7 @@ module TB_UART_TAP_ASYNC (/*AUTOARG*/ ) ;
     #20 reset_n = 1;
   end
 
-  DMI_UART_TAP_ASYNC
+  DMI_UART_TAP
     #(
       .WIDTH(WIDTH)
       )

@@ -1,413 +1,417 @@
-/* File:   dmi_uart_tap.sv
- * Author: Stephan Proß <s.pross@stud.uni-heidelberg.de>
- * Date:   07.09.2022
- *
- * Description: UART TAP for DMI (according to debug spec 0.13)
- */
+//                              -*- Mode: Verilog -*-
+// Filename        : dmi_uart_tap_asynch.sv
+// Description     : UART Test-Access-Point
+// Author          : Stephan Proß
+// Created On      : Fri Sep 09 16:44:56 2022
+// Last Modified By: Stephan Proß
+// Last Modified On: Tue Jan 10 16:44:56 2023
+// Update Count    : 0
+// Status          : Unknown, Use with caution!
+
 import uart_pkg::*;
 
-module DMI_UART_TAP #(
-                      parameter int CLK_RATE = 100000000,
-                      parameter int BAUD_RATE = 3*10**6
-                      )(
-                        input logic                         CLK_I ,
-                        input logic                         RST_NI ,
-                        // UART-Interface connections
-                        output logic                        RE_O,
-                        input logic [7:0]                   DREC_I,
-                        input logic                         RX_EMPTY_I,
-                        input logic                         REC_COMMAND_I,
 
-                        output logic                        WE_O,
-                        output logic [7:0]                  DSEND_O,
-                        input logic                         TX_READY_I,
-                        output logic                        SEND_COMMAND_O,
+module DMI_UART_TAP
+  #(
+    parameter integer unsigned WIDTH = get_write_length(ADDR_DMI)
+    )
+  (
+   input logic                 CLK_I ,
+   input logic                 RST_NI ,
+   // UART-Interface connections
+   output logic                READ_O,
+   input logic [7:0]           DATA_REC_I,
+   input logic                 RX_EMPTY_I,
+   input logic                 CMD_REC_I,
 
-                        //DM Reset signals
-                        output logic                        DMI_HARD_RESET_O,
-                        input logic [1:0]                   DMI_ERROR_I,
+   input logic                 TX_READY_I,
+   output logic                WRITE_O,
+   output logic [7:0]          DATA_SEND_O,
+   output logic                SEND_COMMAND_O,
+   output logic [7:0]          COMMAND_O,
+   //DM Reset signals
+   output logic                DMI_HARD_RESET_O,
+   input logic [1:0]           DMI_ERROR_I,
 
-                        // DM-Interface connections
-                        output logic                        DMI_READ_O,
-                        output logic                        DMI_WRITE_O,
-                        output logic [$bits(dmi_req_t)-1:0] DMI_O,
-                        input logic [$bits(dmi_req_t)-1:0]  DMI_I,
-                        input logic                         DMI_DONE_I
-                        );
-
-  typedef enum                                              {
-                                                             st_idle,
-                                                             st_cmdaddr,
-                                                             st_header,
-                                                             st_length,
-                                                             st_read,
-                                                             st_write,
-                                                             st_reset
-                                                             } state_t;
-
-  typedef struct                                            packed {
-    logic [$bits(dmi_req_t)-1:0]                              dmi;
-    // FSM Signals
-    state_t state;
-    logic [IRLENGTH-1:0]                                    address;
-    logic [CMDLENGTH-1:0]                                   cmd;
-    bit [7:0]                                               data_length;
-    // Signals triggering waiting for respective dmi operations.
-    logic                                                   dmi_wait_read;
-    logic                                                   dmi_wait_write;
-  } fsm_t;
-
-  // State machine and combinatorial next state.
-  fsm_t fsm, fsm_next;
-  // Debug Transport Module Control Register.
-  dtmcs_t                          dtmcs, dtmcs_next;
-  // UART-Interface Signals
-  logic                                                     write;
-  logic                                                     read;
-  // DMI-Interface Signals
-  // MAX_BYTES = ceil($bits(dmi_req_t)/8)
-  localparam integer                                        MAX_BYTES = ($bits(dmi_req_t) + 7) / 8;
-  logic                                                     dmi_read;
-  logic                                                     dmi_write;
-
-  // Serializer Signals
-  logic                                                     ser_reset;
-  logic                                                     ser_run;
-  logic                                                     ser_valid;
-  logic                                                     ser_done;
-  bit [7:0]                                                 ser_num_bits;
-  logic [7:0]                                               ser_data_in;
-  logic [8*MAX_BYTES-1:0]                                   ser_reg_in;
-  logic [8*MAX_BYTES-1:0]                                   ser_reg_out;
-
-  logic                                                     ser_running;
+   // Interconnect signals
+   output logic [IRLENGTH-1:0] WRITE_ADDRESS_O,
+   output logic [WIDTH-1:0]    WRITE_DATA_O,
+   output logic                WRITE_VALID_O,
+   input logic                 WRITE_READY_I,
 
 
-  // Time Out timer to catch unfished operations.
-  // Each UART-Frame takes 10 baud periods (1 Start + 8 Data + 1 Stop)
-  // Wait for the time of 5 UART-Frames.
-  localparam integer                                        MSG_TIMEOUT  = 5 * (10 * CLK_RATE / BAUD_RATE);
-  bit [$clog2(MSG_TIMEOUT)-1:0]                             msg_timer;
-  logic                                                     timer_overflow;
+   output logic [IRLENGTH-1:0] READ_ADDRESS_O,
+   input logic [WIDTH-1:0]     READ_DATA_I,
+   input logic                 READ_VALID_I,
+   output logic                READ_READY_O,
+   input logic [IRLENGTH-1:0]  VALID_ADDRESS_I
 
-  // Function containing condition to run the timer for timeout.
-  function automatic logic run_timer( state_t s, logic rx_empty);
-    if ( rx_empty == 1 && (
-                           s == st_cmdaddr ||
-                           s == st_length  ||
-                           s == st_read    ||
-                           s == st_write
-                           ) ) begin
-      return 1;
+   );
+
+
+
+  //-----------------------------------------------------------------------
+  // ---- Command Decoder ----
+  //-----------------------------------------------------------------------
+  // Signals for easier address and command access.
+  logic [IRLENGTH-1:0]                 address;
+  logic [CMDLENGTH-1:0]                command;
+
+  logic                                busy_decoding;
+
+  logic [CMDLENGTH-1:0]                write_command;
+  logic [IRLENGTH-1:0]                 write_address;
+  logic                                write_wait;
+  logic                                receive_enable;
+
+  logic                                rx_read;
+
+  assign READ_O = rx_read;
+
+  logic [CMDLENGTH-1:0]                read_command;
+  logic [IRLENGTH-1:0]                 read_address;
+
+  logic                                deser_reset;
+  logic                                deser_busy;
+
+
+
+  logic                                read_arbiter_ready;
+  logic                                read_arbiter_valid;
+
+  logic                                write_arbiter_ready;
+  logic                                write_arbiter_valid;
+
+  // Read when rx is not empty under the condition that either a deserialization
+  // is running or, rx is a command and decoder is ready to decode.
+  assign rx_read = !RX_EMPTY_I && ((!busy_decoding && CMD_REC_I) || receive_enable);
+
+  always_ff @(posedge CLK_I) begin : DECODER
+    if(!RST_NI) begin
+      busy_decoding <= 0;
+      address <= '0;
+      command  <= CMD_NOP;
+
+      read_arbiter_valid <= 0;
+      read_address <= '0;
+      read_command <= CMD_NOP;
+
+      write_arbiter_valid <= 0;
+      write_address <= '0;
+      write_command <= CMD_NOP;
+
     end
     else begin
-      return 0;
-    end; // else: !if( rx_empty == 1 && (...
-  endfunction // run_timer
 
-  assign DMI_HARD_RESET_O = dtmcs.dmihardreset;
-  assign DMI_READ_O = dmi_read;
-  assign DMI_WRITE_O = dmi_write;
-  assign DMI_O = fsm.dmi;
-  assign WE_O = write;
-  assign RE_O = read;
-
-  DE_SERIALIZER #(
-                  .MAX_BYTES( MAX_BYTES )
-                  ) DE_SERIALIZER_I
-    (
-     .CLK_I      ( CLK_I        ),
-     .RST_NI     ( ser_reset    ),
-     .NUM_BITS_I ( ser_num_bits ),
-     .BYTE_I     ( DREC_I       ),
-     .REG_I      ( ser_reg_in   ),
-     .BYTE_O     ( DSEND_O      ),
-     .REG_O      ( ser_reg_out  ),
-     .RUN_I      ( ser_run      ),
-     .VALID_O    ( ser_valid    ),
-     .DONE_O     ( ser_done     )
-     ) ;
-
-
-  /* verilator lint_off WIDTH */
-  always_ff @(posedge CLK_I) begin : TIMEOUT_COUNTER
-    if ( !RST_NI || !run_timer(fsm.state, RX_EMPTY_I) ) begin
-      msg_timer <= 0;
-      timer_overflow <= 0;
-    end
-    else begin
-      msg_timer <= msg_timer + 1;
-      if(msg_timer == MSG_TIMEOUT) begin
-        timer_overflow <= 1;
+      read_arbiter_valid <= 0;
+      write_arbiter_valid <= 0;
+      // Process read data and decode command & address.
+      if (rx_read && CMD_REC_I) begin
+        busy_decoding <= 1;
+        address <= DATA_REC_I[IRLENGTH-1:0];
+        command <= DATA_REC_I[7:IRLENGTH];
       end
-    end
-  end // block: TIMEOUT_COUNTER
+      if (busy_decoding) begin
+        case (command)
+          // Reset is communicated with the Arbiters.
+          CMD_RESET : begin
+            write_arbiter_valid <= 1;
+            write_command <= CMD_RESET;
+            write_address <= ADDR_IDCODE;
 
-
-  always_ff @(posedge CLK_I) begin : FSM_CORE
-    if ( !RST_NI ) begin
-      // DTMCS register control.
-      dtmcs <= DTMCS_DEFAULT;
-      // FSM state transitions.
-      fsm.dmi <= '0;
-      fsm.state <= st_idle;
-      fsm.address <= ADDR_IDCODE;
-      fsm.cmd <= CMD_NOP;
-
-    end // if ( !RST_NI )
-    else begin
-      fsm <= fsm_next;
-      // DTMCS transitions. Not all bits are writeable.
-      dtmcs.dmihardreset <= dtmcs_next.dmihardreset;
-      dtmcs.dmireset <= dtmcs_next.dmireset;
-      dtmcs.idle <= dtmcs_next.idle;
-      if (fsm.address == ADDR_DMI && timer_overflow == 1) begin
-        if ( fsm.dmi_wait_read == 1 || fsm.dmi_wait_write == 1 ) begin
-          dtmcs.dmistat <= DMIBusy;
-        end
-      end
-      else if (fsm.address == ADDR_DTMCS && fsm.state == st_write) begin
-        dtmcs.dmistat <= DMINoError;
-      end
-    end // else: !if( !RST_NI )
-  end // block: FSM_CORE
-
-  always_comb begin : FSM
-    fsm_next = fsm;
-    dtmcs_next = dtmcs;
-    // UART-Interface
-    read = 0;
-    write = 0;
-    // DMI-Interface
-    dmi_read = 0;
-    dmi_write = 0;
-    //Serializer
-    ser_reset = 0;
-    ser_run = 0;
-    ser_data_in = '0;
-    ser_reg_in = '0;
-    ser_num_bits = 1;
-
-    case (fsm.state)
-      st_idle: begin
-        // FSM state variables
-        fsm_next.cmd = CMD_NOP;
-        fsm_next.data_length = '0;
-
-        fsm_next.dmi_wait_read = 1;
-        fsm_next.dmi_wait_write = 1;
-
-        // If dmihardreset or dmireset bits of dtmcs are high, trigger reset.
-        if ( dtmcs.dmihardreset == 1 ) begin
-          fsm_next.state = st_reset;
-        end
-        else begin
-          fsm_next.state = st_write;
-        end
-      end // case: st_idle
-
-      st_header: begin
-        // If RX-Fifo is not empty, read and check received byte for HEADER.
-        if (RX_EMPTY_I == 0) begin
-          read = 1;
-          // Is the byte from RX fifo equal to our header?
-          if (DREC_I == HEADER) begin
-            // If yes, proceed to CmdAddr.
-            fsm_next.state = st_cmdaddr;
-          end
-        end
-      end
-
-      st_cmdaddr: begin
-        // If RX-Fifo is not empty, read and apply received byte to cmd and
-        // address.
-        if (RX_EMPTY_I == 0) begin
-          read = 1;
-          // Decode into command and address.
-          fsm_next.cmd = DREC_I[7:IRLENGTH];
-          fsm_next.address = DREC_I[IRLENGTH-1:0];
-          // Move to the next state
-          fsm_next.state = st_length;
-        end
-        else if (timer_overflow == 1) begin
-          fsm_next.state = st_idle;
-        end
-      end // case: st_cmdaddr
-
-      st_length: begin
-        // If RX-Fifo is not empty, read and apply received byte to
-        // data_length.
-        if ( RX_EMPTY_I == 0 ) begin
-          read = 1;
-          // Apply byte as unsigned integer to data_length.
-          fsm_next.data_length  = DREC_I;
-          // If address is to a dmi register, trigger waiting.
-          if (fsm.address == ADDR_DMI) begin
-            fsm_next.dmi_wait_read   = 1;
-            fsm_next.dmi_wait_write  = 1;
-          end;
-          // Move on to the next state determined by command.
-          case (fsm.cmd)
-            CMD_READ : begin
-              fsm_next.state  = st_read;
+            read_arbiter_valid <= 1;
+            read_command <= CMD_RESET;
+            read_address <= address;
+            if (read_arbiter_ready && write_arbiter_ready) begin
+              busy_decoding <= 0;
             end
-            CMD_WRITE : begin
-              fsm_next.state  = st_write;
+          end
+
+          // Read commands do not change write_command and progress.
+          CMD_READ : begin
+            read_arbiter_valid <= 1;
+            read_command <= CMD_READ;
+            read_address <= address;
+            if (read_arbiter_ready) begin
+              busy_decoding <= 0;
             end
-            CMD_RESET : begin
-              fsm_next.state  = st_reset;
+          end
+          CMD_CONT_READ : begin
+            read_arbiter_valid <= 1;
+            read_command <= CMD_CONT_READ;
+            read_address <= address;
+            if (read_arbiter_ready) begin
+              busy_decoding <= 0;
             end
-            default : begin
-              fsm_next.state  = st_idle;
+          end
+
+          // Only CMD_WRITE changes write variables.
+          CMD_WRITE : begin
+            write_arbiter_valid <= 1;
+            write_command <= CMD_WRITE;
+            write_address <= address;
+            if (write_arbiter_ready) begin
+              busy_decoding <= 0;
             end
-          endcase
-        end // if ( RX_EMPTY_I == 0 )
-        else begin
-          // Have write hit the message timeout? If yes, back to idle.
-          if (timer_overflow == 1) begin
-            fsm_next.state  = st_idle;
-          end
-        end // else: !if( RX_EMPTY_I == 0 )
-      end // case: st_length
-
-      st_read: begin
-        // Serialize addressed register into bytes and send over TX.
-        // De-/Serializer is active during this state.
-        ser_reset = 1;
-        // If serialization is not done...
-        // and write do not need to wait for dmi...
-        if (fsm.dmi_wait_read == 1) begin
-          // If write do have to wait for dmi...
-          if (DMI_DONE_I == 0 && timer_overflow == 0) begin
-            // ...tell dmi_handler to read...
-            fsm_next.dmi_wait_read = 1;
-            dmi_read               = 1;
-          end
-          else begin
-            //- ...otherwise write'read done.
-            fsm_next.dmi_wait_read = 0;
-            dmi_read               = 0;
-            fsm_next.dmi           = DMI_I;
-          end // else: !if(DMI_DONE_I == 0 && timer_overflow == 0)
-        end // if (fsm.dmi_wait_read == 1)
-        else begin
-          // always write to TX if ready.
-          write      = TX_READY_I & ser_valid;
-          ser_run = TX_READY_I;
-          if (ser_done == 1) begin
-            // write are done sending if our serializer is done.
-            fsm_next.state = st_idle;
-          end
-        end // else: !if(fsm.dmi_wait_read == 1)
-
-        case (fsm.address)
-          // Dependent on address, load up the serializers register input
-          // with the appropriate data.
-          ADDR_IDCODE : begin
-            ser_reg_in[$size(ser_reg_in) - 1 : $size(IDCODEVALUE)] = '0;
-            ser_reg_in[$size(IDCODEVALUE) - 1 : 0]            = IDCODEVALUE;
-            // IDCODE Register has 32 bits.
-            ser_num_bits = 32;
-          end
-          ADDR_DTMCS : begin
-            ser_reg_in[$size(ser_reg_in) - 1 : $size(dtmcs)] = '0;
-            ser_reg_in[$size(dtmcs) - 1 : 0]                 = dtmcs;
-
-            ser_num_bits = $size(dtmcs);
-          end
-          ADDR_DMI : begin
-            // Read to dmi returns less bits than required to write since
-            // dmi_req) > dmi_resp)
-            ser_reg_in[$size(ser_reg_in) - 1 : $bits(dmi_req_t)] = '0;
-            ser_reg_in[$bits(dmi_req_t) - 1 : 0]                 = fsm.dmi[$bits(dmi_req_t) - 1:0];
-
-            ser_num_bits = $size(fsm.dmi);
           end
           default : begin
-            fsm_next.state = st_idle;
+            busy_decoding <= 0;
           end
-        endcase
-      end // case: st_read
+        endcase // case ( command )
+      end // if (rx_read && CMD_REC_I)
+    end // else: !if(!RST_NI)
+  end // block: CMD_DECODE
 
-      st_write: begin
-        // Deserialze bytes received over RX into addressed register.
-        // De-/Serializer is active during this state.
-        ser_reset = 1;
+  //-----------------------------------------------------------------------
+  // ---- Deserialization process. -----
+  //-----------------------------------------------------------------------
+  localparam integer unsigned MAX_BYTES = (WIDTH + 7) / 8;
+  localparam integer unsigned MAX_BITS = MAX_BYTES * 8;
+  // Ingoing signals
+  bit [$clog2(MAX_BITS)-1:0]  deser_length;
+  logic [7:0]                 deser_byte_in;
+  assign deser_byte_in = DATA_REC_I;
+
+  // Outgoing signals
+  bit [$clog2(MAX_BITS)-1:0]  deser_count;
+  logic                       deser_run;
+  logic                       deser_done;
+  assign WRITE_VALID_O = deser_done;
+
+  logic [MAX_BITS-1:0]        deser_reg;
+  assign WRITE_DATA_O = deser_reg;
+
+  always_ff @(posedge CLK_I) begin : DE_SERIALIZE
+    if(!RST_NI || deser_reset) begin
+      deser_count <= 0;
+      deser_done <= 0;
+      deser_busy <= 0;
+      deser_reg <= '0;
+    end
+    else begin
+      if (deser_count < deser_length) begin
+        deser_done <= 0;
+          if (deser_run) begin
+            deser_busy <= 1;
+            deser_reg[deser_count +: 8] <= deser_byte_in;
+            deser_count <= deser_count + 8;
+          end
+      end
+      else if (deser_busy) begin
+        deser_done <= 1;
+      end
+    end
+  end
+
+  //-----------------------------------------------------------------------
+  // ---- Write Arbiter Process. -----
+  //-----------------------------------------------------------------------
+  // Process controlling progress of deserialzier, data exchange with
+  // write interconnect. Is able to hold reading of rx while data is
+  // transmitted over write interconnect.
+  logic [CMDLENGTH-1:0] current_write_command;
+  logic [IRLENGTH-1:0]  current_write_address;
+  assign WRITE_ADDRESS_O = current_write_address;
+
+  always_ff @(posedge CLK_I) begin : WRITE_ARBITER
+    if(!RST_NI) begin
+
+      write_arbiter_ready <= 0;
+      current_write_command <= CMD_NOP;
+      current_write_address <= '0;
+
+      deser_reset <= 0;
+      deser_run <= 0;
+      deser_length <= get_write_length(ADDR_IDCODE);
+
+      receive_enable <= 0;
+      write_wait <= 0;
+    end
+    else begin
+      write_arbiter_ready <= 0;
+      deser_reset <= 0;
+      deser_run <= 0;
+      receive_enable <= 0;
+      write_wait <= 0;
+
+      if (write_arbiter_valid) begin
+        // New write command has been received or address changed.
+        // Cancel current deserialization progress. Update
+        // deserialization length.
+        deser_reset <= 1;
+        write_arbiter_ready <= 1;
+        current_write_command <= write_command;
+        current_write_address <= write_address;
+        deser_length <= get_write_length(write_address);
+      end
+      else begin
+
+        if (current_write_command == CMD_RESET) begin
+          deser_reset <= 1;
+          current_write_command <= CMD_NOP;
+        end
+        else if (current_write_command == CMD_WRITE) begin
+          // When writing, progress deserializer for each
+          // received byte which is not a command.
+          receive_enable <= !deser_done && !deser_reset;
+          deser_run <= !RX_EMPTY_I && !CMD_REC_I;
+          // When done, transmit data over write interconnect
+          // to target.
+          if (deser_done) begin
+            if (WRITE_READY_I) begin
+              deser_reset <= 1;
+            end
+            else begin
+              write_wait <= 1;
+            end
+          end
+        end
+
+      end
+    end
+  end // block: WRITE_ARBITER
+
+  //---------------------------------------------------------------------
+  // ---- Serializer Process. -----
+  //---------------------------------------------------------------------
+  // Ingoing signals
+  bit [$clog2(MAX_BITS)-1:0]  ser_length;
+  logic                       ser_reset;
+
+  // Outgoing signals
+  bit [$clog2(MAX_BITS)-1:0]  ser_count;
+  logic                       ser_busy;
+  logic                       ser_run;
+  logic                       ser_done;
+  logic [7:0]                 ser_byte_out;
+  assign DATA_SEND_O = ser_byte_out;
 
 
-        if (timer_overflow == 1) begin
-          // Message timeout is reached.
-          fsm_next.state = st_idle;
+
+  always_ff @(posedge CLK_I) begin : SERIALIZE
+    if(!RST_NI || ser_reset) begin
+      ser_count <= 0;
+      ser_busy <= 0;
+      ser_done <= 0;
+      ser_byte_out <= '0;
+    end
+    else begin
+      ser_done <= 0;
+      if (ser_count < ser_length) begin
+          if (ser_run) begin
+            ser_busy <= 1;
+            ser_byte_out <= READ_DATA_I[ser_count +: 8];
+            ser_count <= ser_count + 8;
+          end
+      end
+      else if (ser_busy) begin
+        ser_done <= 1;
+      end
+    end
+  end
+
+  logic [IRLENGTH-1:0] current_read_address;
+  assign READ_ADDRESS_O = current_read_address;
+
+  logic [CMDLENGTH-1:0] current_read_command;
+
+  logic                send_command;
+  assign SEND_COMMAND_O = send_command;
+
+  logic                tx_write;
+  assign tx_write = TX_READY_I && ser_run && !send_command;
+  assign WRITE_O = tx_write;
+
+  always_ff @(posedge CLK_I) begin : READ_ARBITER
+    if (!RST_NI) begin
+
+      read_arbiter_ready <= 0;
+      current_read_address <= ADDR_IDCODE;
+      current_read_command <= CMD_NOP;
+
+      COMMAND_O <= '0;
+      send_command <= 0;
+
+      ser_run <= 0;
+      ser_reset <= 1;
+      READ_READY_O <= 0;
+    end
+    else begin
+      COMMAND_O <= '0;
+      send_command <= 0;
+      read_arbiter_ready <= 0;
+      ser_run <= 0;
+      ser_reset <= 0;
+      READ_READY_O <= 0;
+
+      // Address and command changes are only permitted outside of a running transaction.
+      if (!ser_busy) begin
+        // However, command and address changes by the arbiter are of higher priority.
+        if (read_arbiter_valid) begin
+          read_arbiter_ready <= 1;
+          // Notify TAP if read address has changed.
+          // Sending the command results in TX being busy.
+          COMMAND_O <= {3'b000, read_address};
+          send_command <= 1;
+
+          current_read_address <= read_address;
+          current_read_command <= read_command;
+          ser_length <= get_read_length(read_address);
+        end
+      end
+
+      if (current_read_command == CMD_RESET) begin
+        ser_reset <= 1;
+        current_read_command <= CMD_NOP;
+      end
+      else  if (current_read_command == CMD_READ) begin
+        // Read command will trigger read of address
+        // exactly once.
+        if (!ser_done) begin
+          READ_READY_O <= !ser_busy;
+          ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
         end
         else begin
-          // Deserialization done?
-          if (ser_done == 0) begin
-            // Always read when rx-fifo is not empty:
-            if (RX_EMPTY_I == 0) begin
-              read      = 1;
-              ser_run = 1;
-            end
-            else begin
-              read      = 0;
-              ser_run = 0;
-            end
-          end // if (ser_done == 0)
+          ser_reset <= 1;
+          current_read_command <= CMD_NOP;
+        end
+      end else if( current_read_command == CMD_CONT_READ ) begin
+        // Same as CMD_READ, but will not change command
+        // to CMD_NOP after one read.
+        if (!ser_done) begin
+          READ_READY_O <= !ser_busy;
+          ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
+        end
+        else begin
+          ser_reset <= 1;
+        end
+      end
+      else begin
+        // Without any transaction of higher priority, act on valids on interconnect.
+        if(VALID_ADDRESS_I != ADDR_NOP) begin
+          if (VALID_ADDRESS_I != current_read_address) begin
+            // Update local address and serializer length,
+            current_read_address <= VALID_ADDRESS_I;
+            ser_length <= get_read_length(VALID_ADDRESS_I);
+            // Notify TAP of changed read address.
+            COMMAND_O <= {3'b000, VALID_ADDRESS_I};
+            send_command <= 1;
+          end
           else begin
-            // Deserializing is done.
-            // Do write need to write to and wait for dmi?
-            if (fsm.dmi_wait_write == 1) begin
-              // Is the dmi_handler done?
-              if (DMI_DONE_I == 0) begin
-                fsm_next.dmi_wait_write = 1;
-                dmi_write               = 1;
-              end
-              else begin
-                fsm_next.dmi_wait_write = 0;
-                dmi_write               = 0;
-              end
-            end // if (fsm.dmi_wait_write = 1)
+            if (!ser_done) begin
+              READ_READY_O <= !ser_busy;
+              ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
+            end
             else begin
-              // Either dmi write is done or write didn't need to wait for the
-              // handler anyway.
-              fsm_next.state = st_idle;
-            end
-          end // else: !if(ser_done == 1)
-        end // if (timer_overflow == 1)
-
-        case (fsm.address)
-          // Address decides into which register DREC_I is serialized into.
-          ADDR_DTMCS : begin
-            ser_num_bits = $size(dtmcs);
-            if (ser_done == 1) begin
-              dtmcs_next = ser_reg_out[$size(dtmcs) - 1 : 0];
+              ser_reset <= 1;
             end
           end
+        end
 
-          ADDR_DMI : begin
-            ser_num_bits = $size(fsm.dmi);
-            if (ser_done == 1) begin
-              fsm_next.dmi = ser_reg_out[$size(fsm.dmi) - 1 : 0];
-            end
-          end
+        end
+    end // else: !if(!RST_NI)
+  end // block: READ_ARBITER
 
-          default : begin
-            fsm_next.state = st_idle;
-            ser_reset      = 0;
-          end
-        endcase // case (fsm.address)
 
-      end
-      st_reset: begin
-        // Reset state as the result of a reset command from host system.
-        fsm_next.state   = st_idle;
-        fsm_next.address = ADDR_IDCODE;
-        dtmcs_next       = '0;
-        fsm_next.dmi     = '0;
-        // Stop serialization.
-        ser_reset = 0;
-        ser_run   = 0;
-      end
-    endcase // case (fsm.state)
-  end // block: FSM
 
 endmodule : DMI_UART_TAP
