@@ -38,16 +38,15 @@ module TX_Escape
   logic               tx_done;
   assign tx_done = !buffered_tx_ready && TX_READY_I;
 
+
   always_ff @(posedge CLK_I) begin
     if (!RST_NI) begin
       send_esc <= 0;
       send_data <= 0;
       data_buffer <= '0;
-      WRITE_O <= 0;
       buffered_tx_ready <= 0;
     end
     else begin
-      WRITE_O <= TX_READY_I && (send_esc || send_data);
       buffered_tx_ready <= TX_READY_I;
       // Check if write data from tap needs to be
       // escaped or is explicitly a command.
@@ -83,25 +82,20 @@ module TX_Escape
     end // else: !if(!RST_NI)
   end // always_ff @ (posedge CLK_I)
 
-  always_comb begin
+  assign TX_READY_O = TX_READY_I && !send_esc && !send_data;
+  always_ff @(posedge CLK_I) begin
     if (!RST_NI) begin
-      DATA_SEND_O = '0;
-      ESC_DETECTED_O = 0;
-      TX_READY_O = 0;
+      DATA_SEND_O <= '0;
+      ESC_DETECTED_O <= 0;
+      WRITE_O <= 0;
     end
     else begin
-      DATA_SEND_O = '0;
-      ESC_DETECTED_O = 0;
-      TX_READY_O = TX_READY_I;
-
+      WRITE_O <= TX_READY_I && !tx_done && (send_esc || send_data);
+      DATA_SEND_O <= data_buffer;
+      ESC_DETECTED_O <= 0;
       if (send_esc) begin
-        TX_READY_O = 0;
-        DATA_SEND_O = ESC;
-        ESC_DETECTED_O = 1;
-      end
-      else if (send_data) begin
-        TX_READY_O = 0;
-        DATA_SEND_O = data_buffer;
+        DATA_SEND_O <= ESC;
+        ESC_DETECTED_O <= 1;
       end
     end
   end

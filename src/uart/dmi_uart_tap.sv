@@ -266,7 +266,9 @@ module DMI_UART_TAP
             end
           end
         end
-
+        else begin
+          receive_enable <= 1;
+        end
       end
     end
   end // block: WRITE_ARBITER
@@ -284,6 +286,8 @@ module DMI_UART_TAP
   logic                       ser_run;
   logic                       ser_done;
   logic [7:0]                 ser_byte_out;
+
+
   assign DATA_SEND_O = ser_byte_out;
 
 
@@ -293,22 +297,42 @@ module DMI_UART_TAP
       ser_count <= 0;
       ser_busy <= 0;
       ser_done <= 0;
+
       ser_byte_out <= '0;
+      tx_write <= 0;
     end
     else begin
-      ser_done <= 0;
-      if (ser_count < ser_length) begin
-          if (ser_run) begin
-            ser_busy <= 1;
-            ser_byte_out <= READ_DATA_I[ser_count +: 8];
-            ser_count <= ser_count + 8;
-          end
+      tx_write <= 0;
+      ser_byte_out <= READ_DATA_I[ser_count +: 8];
+      // Start serializing if run signal is set.
+      // Only possible once after reset.
+      if (ser_run && !ser_done) begin
+        ser_busy <= 1;
       end
-      else if (ser_busy) begin
-        ser_done <= 1;
+      if (ser_busy) begin
+      // While busy write current word to tx.
+        if (TX_READY_I) begin
+          tx_write <= 1;
+        end
+        if (tx_write) begin
+          // If we have started writing and
+          // TX becomes busy, we proceed in
+          // the serialization.
+          if (!TX_READY_I) begin
+            tx_write <= 0;
+            if (ser_count < ser_length) begin
+              ser_count <= ser_count + 8;
+            end
+            else begin
+              ser_done <= 1;
+              ser_busy <= 0;
+            end
+          end
+        end
       end
     end
   end
+
 
   logic [IRLENGTH-1:0] current_read_address;
   assign READ_ADDRESS_O = current_read_address;
@@ -319,7 +343,6 @@ module DMI_UART_TAP
   assign SEND_COMMAND_O = send_command;
 
   logic                tx_write;
-  assign tx_write = TX_READY_I && ser_run && !send_command;
   assign WRITE_O = tx_write;
 
   always_ff @(posedge CLK_I) begin : READ_ARBITER
@@ -369,7 +392,7 @@ module DMI_UART_TAP
         // exactly once.
         if (!ser_done) begin
           READ_READY_O <= !ser_busy;
-          ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
+          ser_run <= 1;
         end
         else begin
           ser_reset <= 1;
@@ -380,7 +403,7 @@ module DMI_UART_TAP
         // to CMD_NOP after one read.
         if (!ser_done) begin
           READ_READY_O <= !ser_busy;
-          ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
+          ser_run <= 1;
         end
         else begin
           ser_reset <= 1;
@@ -400,7 +423,7 @@ module DMI_UART_TAP
           else begin
             if (!ser_done) begin
               READ_READY_O <= !ser_busy;
-              ser_run <= (TX_READY_I && !tx_write) && (READ_VALID_I || ser_busy);
+              ser_run <= 1;
             end
             else begin
               ser_reset <= 1;

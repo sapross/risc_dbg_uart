@@ -8,11 +8,12 @@
 // Update Count    : 0
 // Status          : Unknown, Use with caution!
 
+import uart_pkg::*;
+
 
 module UART_TX #(
                  parameter integer CLK_RATE = 100*10**6,
                  parameter integer BAUD_RATE = 115200,
-                 parameter logic [7:0] ESC =8'hB1,
                  parameter logic [7:0] RESUME =8'h00
                  ) (
                     input logic       CLK_I,
@@ -23,8 +24,8 @@ module UART_TX #(
                     input logic       SEND_PAUSE_I,
                     input logic       ESC_DETECTED_I,
                     input logic       CHANNEL_I,
-                    input logic       TX2_I,
-                    output logic      TX_O,
+                    input logic       TX1_I,
+                    output logic      TX0_O,
                     input logic [7:0] DATA_I
                     ) ;
 
@@ -89,7 +90,7 @@ module UART_TX #(
   logic                               tx, tx_next;
   logic                               last_esc, last_esc_next;
 
-  assign TX_O = (TX2_I && CHANNEL_I ) || (tx && !CHANNEL_I);
+  assign TX0_O = (TX1_I && CHANNEL_I ) || (tx && !CHANNEL_I);
 
   always_ff @(posedge CLK_I) begin : FSM_CORE
     if (!RST_NI || CHANNEL_I) begin

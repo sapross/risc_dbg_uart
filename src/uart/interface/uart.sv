@@ -23,10 +23,10 @@ module UART #(
    input logic        RE_I,
    output logic [7:0] DREC_O,
 
-   input logic        RX_I,
-   output logic       RX2_O,
-   output logic       TX_O,
-   input logic        TX2_I,
+   input logic        RX0_I,
+   output logic       RX1_O,
+   output logic       TX0_O,
+   input logic        TX1_I,
    output logic       TX_READY_O,
    output logic       RX_EMPTY_O,
    output logic       RX_FULL_O,
@@ -38,9 +38,8 @@ module UART #(
   logic               tx_start;
   logic               tx_busy;
 
-  logic               rx_rd, rx_wr;
-  logic               tx_wr;
-  logic [7:0]         rx_din, rx_dout;
+  logic               rx_wr;
+  logic [7:0]         rx_din;
 
   logic               channel;
   logic               rx_channel;
@@ -60,13 +59,13 @@ module UART #(
   UART_RX #(
             .CLK_RATE  ( CLK_RATE  ),
             .BAUD_RATE ( BAUD_RATE )
-            ) UART_RX_I
+            ) UART_RX1_I
     (/*AUTOINST*/
      .CLK_I     ( CLK_I  ),
      .RST_NI    ( RST_NI ),
      .RX_DONE_O ( rx_wr  ),
-     .RX_I      ( RX_I   ),
-     .RX2_O     ( RX2_O  ),
+     .RX0_I     ( RX0_I   ),
+     .RX1_O     ( RX1_O  ),
      .DATA_O    ( rx_din ),
      .CHANNEL_O ( rx_channel)
      );
@@ -94,8 +93,8 @@ module UART #(
      .TX_START_I   ( WE_I         ),
      .TX_DONE_O    (              ),
      .TX_BUSY_O    ( tx_busy      ),
-     .TX2_I        ( TX2_I        ),
-     .TX_O         ( TX_O         ),
+     .TX1_I        ( TX1_I        ),
+     .TX0_O         ( TX0_O         ),
      .DATA_I       ( DSEND_I      ),
      .ESC_DETECTED_I(ESC_DETECTED_I),
      .SEND_PAUSE_I ( rx_half_full ),

@@ -79,7 +79,8 @@ module DMI_UART (/*AUTOARG*/
   logic                                              do_write;
   logic                                              do_end;
 
-  assign DMI_REQ_VALID_O = do_read || do_write;
+  assign DMI_REQ_VALID_O = do_write;
+  assign DMI_RESP_READY_O = do_read;
 
   always_ff @(posedge CLK_I) begin : DMI_WRITE
     if(!RST_NI) begin
@@ -107,7 +108,7 @@ module DMI_UART (/*AUTOARG*/
         end
       end
       else if (do_write) begin
-        if(DMI_RESP_VALID_I) begin
+        if(DMI_REQ_READY_I) begin
           do_write <= 0;
           do_end <= 1;
         end
@@ -128,22 +129,19 @@ module DMI_UART (/*AUTOARG*/
   end
 
   // TAP read process. As the data signals are valid all the time
-  // read requests are simply answered by setting valid to high.
+  // after successful DM interaction, read requests are simply
+  // answered by setting valid to high.
   always_ff @(posedge CLK_I) begin : TAP_READ
     if(!RST_NI) begin
       TAP_READ_VALID_O <= 0;
-      DMI_RESP_READY_O <= 0;
     end
     else begin
-      DMI_RESP_READY_O <= 1;
+      TAP_READ_VALID_O <= 0;
       // Do not answer read requests by tap if there is an outstanding
       // dmi operation.
       if (!do_read && !do_write) begin
         if (TAP_READ_READY_I) begin
           TAP_READ_VALID_O <= 1;
-        end
-        else begin
-          TAP_READ_VALID_O <= 0;
         end
       end
     end

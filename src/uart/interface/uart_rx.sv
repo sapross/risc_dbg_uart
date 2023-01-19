@@ -16,8 +16,8 @@ module UART_RX #(
    input logic        RST_NI,
    output logic       RX_DONE_O,
    // output logic       RX_BRK_O,
-   input logic        RX_I,
-   output logic       RX2_O,
+   input logic        RX0_I,
+   output logic       RX1_O,
    output logic [7:0] DATA_O,
    output logic       CHANNEL_O
 ) ;
@@ -33,7 +33,7 @@ module UART_RX #(
       rx_prev <= 1;
     end
     else begin
-      rx_buf <= {RX_I, rx_buf[$size(rx_buf)-1:1]};
+      rx_buf <= {RX0_I, rx_buf[$size(rx_buf)-1:1]};
       rx <= rx_buf[0];
       rx_prev <= rx;
     end
@@ -143,14 +143,14 @@ module UART_RX #(
 
   always_comb begin : RX_OUT
     if (!RST_NI) begin
-      RX2_O = 0;
+      RX1_O = 0;
     end
     else begin
       if (channel) begin
-        RX2_O = RX_I;
+        RX1_O = RX0_I;
       end
       else begin
-        RX2_O = 0;
+        RX1_O = 0;
       end
     end
   end
