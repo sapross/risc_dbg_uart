@@ -49,7 +49,6 @@ module UART_RX #(
   logic               wait_cycle;
 
   logic               rx_edge_detected;
-  logic               rx_finished;
 
 
   always_ff @(posedge CLK_I) begin : BAUD_GEN
@@ -92,7 +91,7 @@ module UART_RX #(
 
   logic [9:0] uart_frame;
   logic       rx_finished;
-  bit [$clog2(10):0] bit_count;
+  bit [$clog2(10)-1:0] bit_count;
   logic              channel;
   assign CHANNEL_O = channel;
   always_ff @(posedge CLK_I) begin : CAPTURE_FRAME
@@ -117,7 +116,7 @@ module UART_RX #(
         if (baudtick) begin
           uart_frame <= {rx, uart_frame[9:1]};
           if (bit_count > 0) begin
-            bit_count--;
+            bit_count <= bit_count -1;
           end
           else begin
             bit_count <= 9;

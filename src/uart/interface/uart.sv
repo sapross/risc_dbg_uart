@@ -36,6 +36,8 @@ module UART #(
 );
 
   logic               tx_start;
+  logic               tx_busy;
+
   logic               rx_rd, rx_wr;
   logic               tx_wr;
   logic [7:0]         rx_din, rx_dout;

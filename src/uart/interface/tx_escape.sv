@@ -87,12 +87,12 @@ module TX_Escape
     if (!RST_NI) begin
       DATA_SEND_O = '0;
       ESC_DETECTED_O = 0;
-      TX_READY_O <= 0;
+      TX_READY_O = 0;
     end
     else begin
+      DATA_SEND_O = '0;
       ESC_DETECTED_O = 0;
       TX_READY_O = TX_READY_I;
-      DATA_SEND_O = '0;
 
       if (send_esc) begin
         TX_READY_O = 0;

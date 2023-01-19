@@ -169,7 +169,7 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
     reset_n <= 1;
 
     send_data({8'hb1});
-    send_data({CMD_WRITE,ADDR_DMI});
+    send_data({CMD_RESET,ADDR_DMI});
     send_data(8'b11111110);
     send_data(8'b11111111);
     send_data(8'b11111111);

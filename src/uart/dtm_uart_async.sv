@@ -31,7 +31,7 @@ module DTM_UART_Async
 
   input logic                          DMI_RESP_VALID_I,
   output logic                         DMI_RESP_READY_O,
-  input [$bits(dmi_resp_t)-1:0]        DMI_RESP_I,
+  input [$bits(dm::dmi_resp_t)-1:0]        DMI_RESP_I,
   output logic                         DMI_REQ_VALID_O,
   input logic                          DMI_REQ_READY_I,
   output [$bits(dmi_req_t)-1:0]        DMI_REQ_O,
@@ -77,9 +77,6 @@ module DTM_UART_Async
   logic                                uintf_empty;
   logic                                uintf_full;
 
-  logic                                rx0, rx1;
-  logic                                tx0, tx1;
-
   logic                                sw_channel;
   logic                                channel;
 
@@ -88,22 +85,22 @@ module DTM_UART_Async
          .BAUD_RATE(BAUD_RATE)
          ) uart_1
     (
-     .CLK_I(CLK_I),
-     .RST_NI(RST_NI),
-     .WE_I(tx_write),
-     .DSEND_I(tx_data),
-     .RE_I(rx_read),
-     .DREC_O(rx_data),
-     .ESC_DETECTED_I(esc_detected),
-     .RX_I(RX_I),
-     .RX2_O(RX2_O),
-     .TX_O(TX_O),
-     .TX2_I(TX2_I),
-     .TX_READY_O(uintf_ready),
-     .RX_EMPTY_O(uintf_empty),
-     .RX_FULL_O(uintf_full),
-     .SW_CHANNEL_I( 1'b0),
-     .CHANNEL_O(channel)
+     .CLK_I          (CLK_I),
+     .RST_NI         (RST_NI),
+     .WE_I           (tx_write),
+     .DSEND_I        (tx_data),
+     .RE_I           (rx_read),
+     .DREC_O         (rx_data),
+     .ESC_DETECTED_I (esc_detected),
+     .RX_I           (RX_I),
+     .RX2_O          (RX2_O),
+     .TX_O           (TX_O),
+     .TX2_I          (TX2_I),
+     .TX_READY_O     (uintf_ready),
+     .RX_EMPTY_O     (uintf_empty),
+     .RX_FULL_O      (uintf_full),
+     .SW_CHANNEL_I   (1'b0),
+     .CHANNEL_O      (channel)
      );
 
   logic                                tap_rx_read;

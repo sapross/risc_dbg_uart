@@ -16,6 +16,7 @@ package uart_pkg;
   localparam integer      CMDLENGTH = 8 - IRLENGTH;
 
   localparam logic [7:0]  HEADER = 8'h01; // SOF in ASCII
+  localparam logic [7:0]  ESC = 8'b10100000;
 
   typedef enum            logic [CMDLENGTH-1:0] {
                                                  CMD_NOP       = 3'b000,
@@ -36,28 +37,79 @@ package uart_pkg;
                                                 ADDR_STB1_D  = 5'b10111
                                                 } addr_e;
 
-  const integer unsigned  WRITE_LENGTHS [logic[IRLENGTH-1:0]] =
-                '{
-                  ADDR_IDCODE  : 32,
-                  ADDR_DTMCS   : 32,
-                  ADDR_DMI     : 41,
-                  ADDR_STB0_CS : 8,
-                  ADDR_STB0_D  : 32,
-                  ADDR_STB1_CS : 8,
-                  ADDR_STB1_D  : 32
-                  };
+  localparam integer unsigned WLEN_IDCODE  = 32;
+  localparam integer unsigned WLEN_DTMCS   = 32;
+  localparam integer unsigned WLEN_DMI     = 41;
+  localparam integer unsigned WLEN_STB0_CS = 8;
+  localparam integer unsigned WLEN_STB0_D  = 32;
+  localparam integer unsigned WLEN_STB1_CS = 8;
+  localparam integer unsigned WLEN_STB1_D  = 32;
 
-  const integer unsigned  READ_LENGTHS [logic[IRLENGTH-1:0]] =
-                '{
-                  ADDR_IDCODE  : 32,
-                  ADDR_DTMCS   : 32,
-                  ADDR_DMI     : 34,
-                  ADDR_STB0_CS : 8,
-                  ADDR_STB0_D  : 32,
-                  ADDR_STB1_CS : 8,
-                  ADDR_STB1_D  : 32
-                  };
+  function integer unsigned get_write_length(input logic [IRLENGTH-1:0] addr);
+    case(addr)
+      ADDR_IDCODE: begin
+        return WLEN_IDCODE;
+      end
+      ADDR_DTMCS: begin
+        return WLEN_DTMCS;
+      end
+      ADDR_DMI: begin
+        return WLEN_DMI;
+      end
+      ADDR_STB0_CS: begin
+        return WLEN_STB0_CS;
+      end
+      ADDR_STB0_D: begin
+        return WLEN_STB0_D;
+      end
+      ADDR_STB1_CS: begin
+        return WLEN_STB1_CS;
+      end
+      ADDR_STB1_D: begin
+        return WLEN_STB1_D;
+      end
+      default : begin
+        return 8;
+      end
+    endcase
+  endfunction // get_write_length
 
+  localparam integer unsigned RLEN_IDCODE  = 32;
+  localparam integer unsigned RLEN_DTMCS   = 32;
+  localparam integer unsigned RLEN_DMI     = 34;
+  localparam integer unsigned RLEN_STB0_CS = 8;
+  localparam integer unsigned RLEN_STB0_D  = 32;
+  localparam integer unsigned RLEN_STB1_CS = 8;
+  localparam integer unsigned RLEN_STB1_D  = 32;
+
+  function integer unsigned get_read_length(input logic [IRLENGTH-1:0] addr);
+    case(addr)
+      ADDR_IDCODE: begin
+        return RLEN_IDCODE;
+      end
+      ADDR_DTMCS: begin
+        return RLEN_DTMCS;
+      end
+      ADDR_DMI: begin
+        return RLEN_DMI;
+      end
+      ADDR_STB0_CS: begin
+        return RLEN_STB0_CS;
+      end
+      ADDR_STB0_D: begin
+        return RLEN_STB0_D;
+      end
+      ADDR_STB1_CS: begin
+        return RLEN_STB1_CS;
+      end
+      ADDR_STB1_D: begin
+        return RLEN_STB1_D;
+      end
+      default : begin
+        return 8;
+      end
+    endcase
+  endfunction // get_read_length
 
   localparam integer unsigned ABITS = 7;
 

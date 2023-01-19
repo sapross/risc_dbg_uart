@@ -10,9 +10,10 @@
 
 import uart_pkg::*;
 
+
 module DMI_UART_TAP_ASYNC
   #(
-    parameter integer unsigned WIDTH = $bits(dmi_req_t)
+    parameter integer unsigned WIDTH = get_write_length(ADDR_DMI)
     )
   (
    input logic                 CLK_I ,
@@ -107,8 +108,8 @@ module DMI_UART_TAP_ASYNC
       // Process read data and decode command & address.
       if (rx_read && CMD_REC_I) begin
         busy_decoding <= 1;
-        address = DATA_REC_I[IRLENGTH-1:0];
-        command = DATA_REC_I[7:IRLENGTH];
+        address <= DATA_REC_I[IRLENGTH-1:0];
+        command <= DATA_REC_I[7:IRLENGTH];
       end
       if (busy_decoding) begin
         case (command)
@@ -164,7 +165,7 @@ module DMI_UART_TAP_ASYNC
   //-----------------------------------------------------------------------
   // ---- Deserialization process. -----
   //-----------------------------------------------------------------------
-  localparam integer unsigned MAX_BYTES = ($bits(dmi_req_t) + 7) / 8;
+  localparam integer unsigned MAX_BYTES = (WIDTH + 7) / 8;
   localparam integer unsigned MAX_BITS = MAX_BYTES * 8;
   // Ingoing signals
   bit [$clog2(MAX_BITS)-1:0]  deser_length;
@@ -193,7 +194,7 @@ module DMI_UART_TAP_ASYNC
           if (deser_run) begin
             deser_busy <= 1;
             deser_reg[deser_count +: 8] <= deser_byte_in;
-            deser_count = deser_count + 8;
+            deser_count <= deser_count + 8;
           end
       end
       else if (deser_busy) begin
@@ -221,7 +222,7 @@ module DMI_UART_TAP_ASYNC
 
       deser_reset <= 0;
       deser_run <= 0;
-      deser_length <= WRITE_LENGTHS[ADDR_IDCODE];
+      deser_length <= get_write_length(ADDR_IDCODE);
 
       receive_enable <= 0;
       write_wait <= 0;
@@ -234,22 +235,22 @@ module DMI_UART_TAP_ASYNC
       write_wait <= 0;
 
       if (write_arbiter_valid) begin
-        // New write command has been received or address chagned.
+        // New write command has been received or address changed.
         // Cancel current deserialization progress. Update
         // deserialization length.
         deser_reset <= 1;
         write_arbiter_ready <= 1;
         current_write_command <= write_command;
         current_write_address <= write_address;
-        deser_length <= WRITE_LENGTHS[write_address];
+        deser_length <= get_write_length(write_address);
       end
       else begin
 
-        if (write_command == CMD_RESET) begin
+        if (current_write_command == CMD_RESET) begin
           deser_reset <= 1;
           current_write_command <= CMD_NOP;
         end
-        else if (write_command == CMD_WRITE) begin
+        else if (current_write_command == CMD_WRITE) begin
           // When writing, progress deserializer for each
           // received byte which is not a command.
           receive_enable <= !deser_done && !deser_reset;
@@ -300,7 +301,7 @@ module DMI_UART_TAP_ASYNC
           if (ser_run) begin
             ser_busy <= 1;
             ser_byte_out <= READ_DATA_I[ser_count +: 8];
-            ser_count = ser_count + 8;
+            ser_count <= ser_count + 8;
           end
       end
       else if (ser_busy) begin
@@ -325,8 +326,8 @@ module DMI_UART_TAP_ASYNC
     if (!RST_NI) begin
 
       read_arbiter_ready <= 0;
-      current_read_address = ADDR_IDCODE;
-      current_read_command = CMD_NOP;
+      current_read_address <= ADDR_IDCODE;
+      current_read_command <= CMD_NOP;
 
       COMMAND_O <= '0;
       send_command <= 0;
@@ -355,13 +356,13 @@ module DMI_UART_TAP_ASYNC
 
           current_read_address <= read_address;
           current_read_command <= read_command;
-          ser_length <= READ_LENGTHS[read_address];
+          ser_length <= get_read_length(read_address);
         end
       end
 
       if (current_read_command == CMD_RESET) begin
         ser_reset <= 1;
-        current_write_command <= CMD_NOP;
+        current_read_command <= CMD_NOP;
       end
       else  if (current_read_command == CMD_READ) begin
         // Read command will trigger read of address
@@ -391,7 +392,7 @@ module DMI_UART_TAP_ASYNC
           if (VALID_ADDRESS_I != current_read_address) begin
             // Update local address and serializer length,
             current_read_address <= VALID_ADDRESS_I;
-            ser_length <= READ_LENGTHS[VALID_ADDRESS_I];
+            ser_length <= get_read_length(VALID_ADDRESS_I);
             // Notify TAP of changed read address.
             COMMAND_O <= {3'b000, VALID_ADDRESS_I};
             send_command <= 1;

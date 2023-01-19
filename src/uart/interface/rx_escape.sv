@@ -59,6 +59,8 @@ module RX_Escape
       READ_O = 0;
     end
     else begin
+      state_next = state;
+      data_next = data;
       COMMAND_O = 0;
       RX_EMPTY_O = 1;
       READ_O = 0;

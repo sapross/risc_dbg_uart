@@ -85,7 +85,7 @@ module UART_TX #(
   end // block: BAUD_GEN
 
   logic [9:0]                         frame,  frame_next; // UART Frame
-  integer                             bitnum, bitnum_next; // Bit count
+  bit [$clog2(10)-1:0]                bitnum, bitnum_next; // Bit count
   logic                               tx, tx_next;
   logic                               last_esc, last_esc_next;
 
