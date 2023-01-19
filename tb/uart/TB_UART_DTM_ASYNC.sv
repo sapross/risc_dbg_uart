@@ -26,14 +26,6 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
    logic                       clk;
    logic                       reset_n;
 
-   logic                       tx_write;
-   logic [7:0]                 tx_data;
-   logic                       tx_cmd_send;
-   logic [7:0]                 tx_cmd;
-
-   logic                       rx_read;
-   logic [7:0]                 rx_data;
-   logic                       rx_cmd;
 
    logic                       rx0, rx1;
    logic                       tx0,tx1;
@@ -45,7 +37,6 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
    logic                       dmi_resp_ready;
    logic                       dmi_resp_valid;
    logic [33:0]                dmi_resp_data;
-  assign dmi_resp_data = {dmi_req_data[31:0],2'h0};
 
    logic                       status_valid;
    logic [7:0]                 status;
@@ -57,7 +48,7 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
 
    DTM_UART
      #(
-       .ESC(8'hB1),
+       .ESC(ESC),
        .CLK_RATE(25*10*6),
        .BAUD_RATE(3*10*6),
        .STB_CONTROL_WIDTH(8),
@@ -68,10 +59,10 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
      (
       .CLK_I(clk),
       .RST_NI(reset_n),
-      .RX_I(rx0),
-      .RX2_O(rx1),
-      .TX_O(tx0),
-      .TX2_I(tx1),
+      .RX0_I(rx0),
+      .RX1_O(rx1),
+      .TX0_O(tx0),
+      .TX1_I(tx1),
       .DMI_REQ_READY_I    (dmi_req_ready),
       .DMI_REQ_VALID_O    (dmi_req_valid),
       .DMI_REQ_O          (dmi_req_data),
@@ -93,6 +84,27 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
       .STB1_DATA_READY_I(stb_data_ready)
       );
 
+`define rv_echo(READY_OUT, VALID_IN, DATA_IN, READY_IN, VALID_OUT, DATA_OUT) \
+  always_ff @(posedge clk) begin \
+    if (!reset_n) begin \
+      READY_OUT <= 0; \
+      VALID_OUT <= 0; \
+      DATA_OUT <= '0; \
+    end \
+    else begin \
+      READY_OUT <= 0; \
+      VALID_OUT <= 0; \
+      if(VALID_IN) begin \
+        READY_OUT <= 1; \
+        DATA_OUT <= DATA_IN; \
+      end \
+      if(READY_IN) begin \
+        VALID_OUT <= 1; \
+      end \
+    end \
+  end
+
+`rv_echo(dmi_req_ready, dmi_req_valid, dmi_req_data, dmi_resp_ready, dmi_resp_valid, dmi_resp_data)
 
   initial begin
     clk = 0;
@@ -117,8 +129,6 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
     tx0 = 1;
     tx1 = 1;
     sw_channel =0;
-    dmi_req_ready = 1;
-    dmi_resp_valid = 1;
 
     status_valid = 0;
     status = '0;
@@ -139,7 +149,6 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
      tx1 = 1;
      sw_channel =0;
 
-     dmi_req_valid = 1;
 
      status_valid = 0;
      status = '0;
@@ -168,28 +177,43 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
     @(posedge clk);
     reset_n <= 1;
 
-    send_data({8'hb1});
-    send_data({CMD_RESET,ADDR_DMI});
-    send_data(8'b11111110);
-    send_data(8'b11111111);
-    send_data(8'b11111111);
-    send_data(8'b11111111);
-    send_data(8'b01000011);
-    send_data(8'b11111100);
+   // send_data({ESC});
+   // send_data({CMD_WRITE,ADDR_DMI});
+   // send_data(8'b11111110);
+   // send_data(8'b11111111);
+   // send_data(8'b11111111);
+   // send_data(8'b11111111);
+   // send_data(8'b01000011);
+   // send_data(8'b11111100);
 
-    send_data({8'hb1});
-    send_data({CMD_WRITE,ADDR_DMI});
-    send_data(8'b00000001);
-    send_data(8'b00000000);
-    send_data(8'b00000000);
-    send_data(8'b00000000);
-    send_data(8'b01000000);
-    send_data(8'b11111100);
+    for(int i = 0; i< 10; i++) begin
+      @(posedge clk);
+    end
+    send_data({ESC});
+    send_data({CMD_RESET,ADDR_DTMCS});
+    for(int i = 0; i< 180; i++) begin
+      @(posedge clk);
+    end
+    send_data({ESC});
+    send_data({CMD_READ,ADDR_DTMCS});
+
+   // send_data({ESC});
+   // send_data({CMD_WRITE,ADDR_DMI});
+   // send_data(8'b00000001);
+   // send_data(8'b00000000);
+   // send_data(8'b00000000);
+   // send_data(8'b00000000);
+   // send_data(8'b01000000);
+   // send_data(8'b11111100);
+
+   //  send_data({ESC});
+   //  for(int i = 0; i< 10; i++) begin
+   //    @(posedge clk);
+   //  end
+   //  send_data({CMD_READ,ADDR_DMI});
+   //  @(posedge clk);
 
 
-    send_data({8'hb1});
-    send_data({CMD_READ,ADDR_DMI});
-    @(posedge clk);
 
   endtask // test_read
 

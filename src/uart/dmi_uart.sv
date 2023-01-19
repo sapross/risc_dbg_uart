@@ -43,17 +43,16 @@ module DMI_UART (/*AUTOARG*/
     logic [31:0]                                     data;
     logic [1:0]                                      op;
   } dmi_t;
-  dmi_t dmi_req;
+  dmi_t tap_dmi_req;
+  assign tap_dmi_req = dmi_t'(TAP_WRITE_DATA_I);
 
   dmi_req_t conv_req;
-  assign conv_req.addr = dmi_req.addr;
-  assign conv_req.data = dmi_req.data;
-  assign conv_req.op = dtm_op_e'(dmi_req.op);
+  assign conv_req.addr = tap_dmi_req.addr;
+  assign conv_req.data = tap_dmi_req.data;
+  assign conv_req.op = dtm_op_e'(tap_dmi_req.op);
 
   assign DMI_REQ_O = conv_req;
 
-  dmi_t tap_dmi_req;
-  assign tap_dmi_req = dmi_t'(TAP_WRITE_DATA_I);
 
   // DMI-JTAG uses a different format to answer the TAP.
   typedef struct                                     packed {
@@ -69,7 +68,7 @@ module DMI_UART (/*AUTOARG*/
   tap_resp_t tap_dmi_resp;
 
   dmi_resp_t dmi_resp;
-  assign tap_dmi_resp.addr = dmi_req.addr;
+  assign tap_dmi_resp.addr = tap_dmi_req.addr;
   assign tap_dmi_resp.data = dmi_resp.data;
   assign tap_dmi_resp.dmi_error = DMINoError;
 
@@ -85,7 +84,6 @@ module DMI_UART (/*AUTOARG*/
   always_ff @(posedge CLK_I) begin : DMI_WRITE
     if(!RST_NI) begin
       TAP_WRITE_READY_O <= 0;
-      dmi_req <= '0;
       dmi_resp <= '0;
 
       do_read <= 0;
@@ -116,7 +114,6 @@ module DMI_UART (/*AUTOARG*/
       else begin
         if (TAP_WRITE_VALID_I) begin
           TAP_WRITE_READY_O <= 1;
-          dmi_req <= tap_dmi_req;
           if (tap_dmi_req.op == DTM_READ) begin
             do_read <= 1;
           end

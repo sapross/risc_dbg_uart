@@ -311,23 +311,23 @@ module DMI_UART_TAP
       end
       if (ser_busy) begin
       // While busy write current word to tx.
-        if (TX_READY_I) begin
-          tx_write <= 1;
-        end
-        if (tx_write) begin
-          // If we have started writing and
-          // TX becomes busy, we proceed in
-          // the serialization.
-          if (!TX_READY_I) begin
-            tx_write <= 0;
-            if (ser_count < ser_length) begin
+        if (ser_count < ser_length) begin
+          if (TX_READY_I) begin
+            tx_write <= 1;
+          end
+          if (tx_write) begin
+            // If we have started writing and
+            // TX becomes busy, we proceed in
+            // the serialization.
+            if (!TX_READY_I) begin
+              tx_write <= 0;
               ser_count <= ser_count + 8;
             end
-            else begin
-              ser_done <= 1;
-              ser_busy <= 0;
-            end
           end
+        end
+        else begin
+          ser_done <= 1;
+          ser_busy <= 0;
         end
       end
     end

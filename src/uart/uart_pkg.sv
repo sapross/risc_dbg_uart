@@ -76,7 +76,7 @@ package uart_pkg;
 
   localparam integer unsigned RLEN_IDCODE  = 32;
   localparam integer unsigned RLEN_DTMCS   = 32;
-  localparam integer unsigned RLEN_DMI     = 34;
+  localparam integer unsigned RLEN_DMI     = 41;
   localparam integer unsigned RLEN_STB0_CS = 8;
   localparam integer unsigned RLEN_STB0_D  = 32;
   localparam integer unsigned RLEN_STB1_CS = 8;
@@ -134,10 +134,10 @@ package uart_pkg;
                                                     dmihardreset : 0,
                                                     dmireset : 0,
                                                     zero0 : 0,
-                                                    idle : 3'b001,
+                                                    idle : 3'd1,
                                                     dmistat : DMINoError,
-                                                    abits : ABITS,
-                                                    version : 4'h01
+                                                    abits : 6'd7,
+                                                    version : 4'd1
                                                     };
 
 
