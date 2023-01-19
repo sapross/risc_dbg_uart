@@ -9,7 +9,7 @@
 
 import uart_pkg::*;
 
-module DTM_UART_Async
+module DTM_UART
 #(
   parameter logic [7:0] ESC = 8'hB1,
   parameter integer     CLK_RATE = 100*10**6,

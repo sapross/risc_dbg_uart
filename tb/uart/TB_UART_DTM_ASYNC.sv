@@ -55,7 +55,7 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
    logic                       stb_data_ready;
 
 
-   DTM_UART_Async
+   DTM_UART
      #(
        .ESC(8'hB1),
        .CLK_RATE(25*10*6),
