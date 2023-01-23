@@ -138,7 +138,7 @@ begin
       DMI_REQ_VALID_O  => dmi_req_valid,
       DMI_REQ_READY_I  => dmi_req_ready,
       DMI_REQ_O        => dmi_req,
-      RX_I             => rxd,
+      RX1_I             => rxd,
       TX_O             => txd
     );
 

@@ -84,6 +84,69 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
       .STB1_DATA_READY_I(stb_data_ready)
       );
 
+  logic                        dm_slave_req;
+  logic                        dm_slave_we;
+  logic [64-1:0]               dm_slave_addr;
+  logic [64/8-1:0]             dm_slave_be;
+  logic [64-1:0]               dm_slave_wdata;
+  logic [64-1:0]               dm_slave_rdata;
+
+  logic                        dm_master_req;
+  logic [64-1:0]               dm_master_add;
+  logic                        dm_master_we;
+  logic [64-1:0]               dm_master_wdata;
+  logic [64/8-1:0]             dm_master_be;
+  logic                        dm_master_gnt;
+  logic                        dm_master_r_valid;
+  logic [64-1:0]               dm_master_r_rdata;
+  logic                        ndmreset;
+  logic                        dmactive;
+  logic                        debug_req_irq;
+
+  localparam                   dm::hartinfo_t DebugHartInfo = '{
+                                                                zero1:        '0,
+                                                                nscratch:      2, // Debug module needs at least two scratch regs
+                                                                zero0:        '0,
+                                                                dataaccess: 1'b1, // data registers are memory mapped in the debugger
+                                                                datasize: dm::DataCount,
+                                                                dataaddr: dm::DataAddr
+                                              };
+  dm_top #(
+           .NrHarts          ( 1                 ),
+           .BusWidth         ( 64                ),
+           .SelectableHarts  ( 1'b1              )
+           ) i_dm_top (
+                       .clk_i            ( clk               ),
+                       .rst_ni           ( reset_n            ), // PoR
+                       .testmode_i       ( 1'b0              ),
+                       .ndmreset_o       ( ndmreset          ),
+                       .dmactive_o       ( dmactive          ), // active debug session
+                       .debug_req_o      ( debug_req_irq     ),
+                       .unavailable_i    ( '0                ),
+                       .hartinfo_i       ( {DebugHartInfo} ),
+                       .slave_req_i      ( '0                ),
+                       .slave_we_i       ( '0                ),
+                       .slave_addr_i     ( '0                ),
+                       .slave_be_i       ( '0                ),
+                       .slave_wdata_i    ( '0                ),
+                       .slave_rdata_o    ( dm_slave_rdata    ),
+                       .master_req_o     ( dm_master_req     ),
+                       .master_add_o     ( dm_master_add     ),
+                       .master_we_o      ( dm_master_we      ),
+                       .master_wdata_o   ( dm_master_wdata   ),
+                       .master_be_o      ( dm_master_be      ),
+                       .master_gnt_i     ( '0                ),
+                       .master_r_valid_i ( '0                ),
+                       .master_r_rdata_i ( '0                ),
+                       .dmi_rst_ni       ( reset_n           ),
+                       .dmi_req_valid_i  ( dmi_req_valid   ),
+                       .dmi_req_ready_o  ( dmi_req_ready   ),
+                       .dmi_req_i        ( dmi_req_data    ),
+                       .dmi_resp_valid_o ( dmi_resp_valid  ),
+                       .dmi_resp_ready_i ( dmi_resp_ready  ),
+                       .dmi_resp_o       ( dmi_resp_data   )
+                       );
+
 `define rv_echo(READY_OUT, VALID_IN, DATA_IN, READY_IN, VALID_OUT, DATA_OUT) \
   always_ff @(posedge clk) begin \
     if (!reset_n) begin \
@@ -92,8 +155,8 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
       DATA_OUT <= '0; \
     end \
     else begin \
-      READY_OUT <= 0; \
-      VALID_OUT <= 0; \
+      READY_OUT <= 1; \
+      VALID_OUT <= 1; \
       if(VALID_IN) begin \
         READY_OUT <= 1; \
         DATA_OUT <= DATA_IN; \
@@ -104,7 +167,7 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
     end \
   end
 
-`rv_echo(dmi_req_ready, dmi_req_valid, dmi_req_data, dmi_resp_ready, dmi_resp_valid, dmi_resp_data)
+// `rv_echo(dmi_req_ready, dmi_req_valid, dmi_req_data, dmi_resp_ready, dmi_resp_valid, dmi_resp_data)
 
   initial begin
     clk = 0;
@@ -177,34 +240,33 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
     @(posedge clk);
     reset_n <= 1;
 
-   // send_data({ESC});
-   // send_data({CMD_WRITE,ADDR_DMI});
-   // send_data(8'b11111110);
-   // send_data(8'b11111111);
-   // send_data(8'b11111111);
-   // send_data(8'b11111111);
-   // send_data(8'b01000011);
-   // send_data(8'b11111100);
+   send_data({ESC});
+   send_data({CMD_WRITE,ADDR_DMI});
+   send_data(8'b00000110);
+   send_data(8'b00000000);
+   send_data(8'b00000000);
+   send_data(8'b00000000);
+   send_data(8'b01000000);
+   send_data(8'b11111100);
 
-    for(int i = 0; i< 10; i++) begin
-      @(posedge clk);
-    end
+   send_data({ESC});
+   send_data({CMD_WRITE,ADDR_DMI});
+   send_data(8'b00000101);
+   send_data(8'b00000000);
+   send_data(8'b00000000);
+   send_data(8'b00000000);
+   send_data(8'b01000000);
+   send_data(8'b11111100);
+
     send_data({ESC});
-    send_data({CMD_RESET,ADDR_DTMCS});
+    send_data({CMD_READ,ADDR_DMI});
+
     for(int i = 0; i< 180; i++) begin
       @(posedge clk);
     end
     send_data({ESC});
     send_data({CMD_READ,ADDR_DTMCS});
 
-   // send_data({ESC});
-   // send_data({CMD_WRITE,ADDR_DMI});
-   // send_data(8'b00000001);
-   // send_data(8'b00000000);
-   // send_data(8'b00000000);
-   // send_data(8'b00000000);
-   // send_data(8'b01000000);
-   // send_data(8'b11111100);
 
    //  send_data({ESC});
    //  for(int i = 0; i< 10; i++) begin

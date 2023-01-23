@@ -257,7 +257,7 @@ DTM_UART #(
            ) i_uart_dtm (
            .CLK_I                ( clk_i              ),
            .RST_NI               ( rst_ni             ),
-           .RX_I                 ( uart_rx            ),
+           .RX1_I                 ( uart_rx            ),
            .TX_O                 ( uart_tx            ),
            .DMI_REQ_VALID_O      ( dtm_req_valid      ),
            .DMI_REQ_READY_I      ( debug_req_ready    ),

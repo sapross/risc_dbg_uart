@@ -201,7 +201,7 @@ begin
       RST_NI     => rst_ni,
       RE_I       => re,
       WE_I       => we,
-      RX_I       => rxd,
+      RX1_I       => rxd,
       TX_O       => txd,
       RX2_O       => rxd2,
       TX2_I       => txd2,

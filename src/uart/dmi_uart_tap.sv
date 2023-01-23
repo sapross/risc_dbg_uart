@@ -303,7 +303,9 @@ module DMI_UART_TAP
     end
     else begin
       tx_write <= 0;
-      ser_byte_out <= READ_DATA_I[ser_count +: 8];
+      for(int j = 0; j< 8; j++) begin
+        ser_byte_out[j] <= ser_count + j < ser_length ? READ_DATA_I[ser_count + j] : 1'b0;
+      end
       // Start serializing if run signal is set.
       // Only possible once after reset.
       if (ser_run && !ser_done) begin

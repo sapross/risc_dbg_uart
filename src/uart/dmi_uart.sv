@@ -46,10 +46,13 @@ module DMI_UART (/*AUTOARG*/
   dmi_t tap_dmi_req;
   assign tap_dmi_req = dmi_t'(TAP_WRITE_DATA_I);
 
+  // Registered Tap request.
+  dmi_t request;
+
   dmi_req_t conv_req;
-  assign conv_req.addr = tap_dmi_req.addr;
-  assign conv_req.data = tap_dmi_req.data;
-  assign conv_req.op = dtm_op_e'(tap_dmi_req.op);
+  assign conv_req.addr = request.addr;
+  assign conv_req.data = request.data;
+  assign conv_req.op = dtm_op_e'(request.op);
 
   assign DMI_REQ_O = conv_req;
 
@@ -68,57 +71,66 @@ module DMI_UART (/*AUTOARG*/
   tap_resp_t tap_dmi_resp;
 
   dmi_resp_t dmi_resp;
-  assign tap_dmi_resp.addr = tap_dmi_req.addr;
+  assign tap_dmi_resp.addr = '0; //tap_dmi_req.addr;
   assign tap_dmi_resp.data = dmi_resp.data;
   assign tap_dmi_resp.dmi_error = DMINoError;
 
   assign TAP_READ_DATA_O = tap_dmi_resp;
 
+  logic                                              do_request;
   logic                                              do_read;
-  logic                                              do_write;
   logic                                              do_end;
 
-  assign DMI_REQ_VALID_O = do_write;
-  assign DMI_RESP_READY_O = do_read;
+  //assign dmi_resp = DMI_RESP_I;
 
   always_ff @(posedge CLK_I) begin : DMI_WRITE
     if(!RST_NI) begin
       TAP_WRITE_READY_O <= 0;
       dmi_resp <= '0;
-
+      request <=  '0;
+      DMI_REQ_VALID_O <= 0;
+      DMI_RESP_READY_O <= 0;
       do_read <= 0;
-      do_write <= 0;
+      do_request <= 0;
       do_end <= 0;
 
     end
     else begin
       TAP_WRITE_READY_O <= 0;
-      if (do_end) begin
-        if (!TAP_WRITE_VALID_I) begin
+      DMI_REQ_VALID_O <= 0;
+      DMI_RESP_READY_O <= 0;
+
+      if (do_request) begin
+        DMI_REQ_VALID_O <= 1;
+        if (DMI_REQ_READY_I) begin
+          do_request <= 0;
+          do_end <= 1;
+        end
+      end
+
+      else if (do_end) begin
+        DMI_RESP_READY_O <= 1;
+        if (DMI_RESP_READY_O) begin
           do_end <= 0;
+          if(do_read) begin
+            do_read <= 0;
+            dmi_resp <= DMI_RESP_I;
+          end
         end
       end
-      else if (do_read) begin
-        if (DMI_RESP_VALID_I) begin
-          do_read <= 0;
-          do_end <= 1;
-          dmi_resp <= DMI_RESP_I;
-        end
-      end
-      else if (do_write) begin
-        if(DMI_REQ_READY_I) begin
-          do_write <= 0;
-          do_end <= 1;
-        end
-      end
+
       else begin
         if (TAP_WRITE_VALID_I) begin
           TAP_WRITE_READY_O <= 1;
+          request <= tap_dmi_req;
+
           if (tap_dmi_req.op == DTM_READ) begin
+            do_request <= 1;
             do_read <= 1;
+
           end
           else if (tap_dmi_req.op == DTM_WRITE) begin
-            do_write <= 1;
+            do_request <= 1;
           end
         end
       end
@@ -136,7 +148,7 @@ module DMI_UART (/*AUTOARG*/
       TAP_READ_VALID_O <= 0;
       // Do not answer read requests by tap if there is an outstanding
       // dmi operation.
-      if (!do_read && !do_write) begin
+      if (!do_read && !do_request) begin
         if (TAP_READ_READY_I) begin
           TAP_READ_VALID_O <= 1;
         end
