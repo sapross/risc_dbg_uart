@@ -122,15 +122,15 @@ module DMI_UART (/*AUTOARG*/
       else begin
         if (TAP_WRITE_VALID_I) begin
           TAP_WRITE_READY_O <= 1;
-          request <= tap_dmi_req;
 
           if (tap_dmi_req.op == DTM_READ) begin
             do_request <= 1;
             do_read <= 1;
-
+            request <= tap_dmi_req;
           end
           else if (tap_dmi_req.op == DTM_WRITE) begin
             do_request <= 1;
+            request <= tap_dmi_req;
           end
         end
       end

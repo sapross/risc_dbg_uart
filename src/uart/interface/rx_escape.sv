@@ -66,6 +66,8 @@ module RX_Escape
       READ_O = 0;
       case (state)
         st_idle : begin
+          // Continously read available data from RX, move to st_escape or st_data
+          // dependent on data value.
           if(!RX_EMPTY_I) begin
             READ_O = 1;
             data_next = DATA_REC_I;
@@ -79,19 +81,28 @@ module RX_Escape
           end
         end
         st_data : begin
+          // Byte received is treated as data. Wait for read from TAP.
           RX_EMPTY_O = 0;
           if (READ_I) begin
             state_next = st_idle;
           end
         end
         st_escape : begin
+          // Byte received is ESC. Read next byte and move to st_data if ESC again or
+          // st_command.
           if(!RX_EMPTY_I) begin
             READ_O = 1;
             data_next = DATA_REC_I;
-            state_next = st_command;
+            if (DATA_REC_I == ESC) begin
+              state_next = st_data;
+            end
+            else begin
+              state_next = st_command;
+            end
           end
         end
         st_command : begin
+          // Byte received is command. Wait for TAP to read.
           COMMAND_O = 1;
           RX_EMPTY_O = 0;
           if (READ_I) begin

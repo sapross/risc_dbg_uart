@@ -36,8 +36,11 @@ module TX_Escape
   logic               send_data ;
   logic               buffered_tx_ready;
   logic               tx_done;
+  // TX_Done is rising edge of incoming tx_ready.
   assign tx_done = !buffered_tx_ready && TX_READY_I;
 
+  // We are ready to send if TX-module is ready and neither esc or data are currently sent.
+  assign TX_READY_O = TX_READY_I && !send_esc && !send_data;
 
   always_ff @(posedge CLK_I) begin
     if (!RST_NI) begin
@@ -48,21 +51,24 @@ module TX_Escape
     end
     else begin
       buffered_tx_ready <= TX_READY_I;
-      // Check if write data from tap needs to be
-      // escaped or is explicitly a command.
-      if (WRITE_COMMAND_I) begin
-        data_buffer <= COMMAND_I;
-        send_data <= 1;
-        send_esc <= 1;
-      end
-      else if (WRITE_I && (!send_data)) begin
-        data_buffer <= DATA_SEND_I;
-        send_data <= 1;
-        if (DATA_SEND_I == ESC ) begin
+      // Only service sending of data, commands if not busy.
+      if (!send_data) begin
+        // Check if write data from tap needs to be
+        // escaped or is explicitly a command.
+        if (WRITE_COMMAND_I) begin
+          data_buffer <= COMMAND_I;
+          send_data <= 1;
           send_esc <= 1;
         end
-        else begin
-          send_esc <= 0;
+        else if (WRITE_I) begin
+          data_buffer <= DATA_SEND_I;
+          send_data <= 1;
+          if (DATA_SEND_I == ESC ) begin
+            send_esc <= 1;
+          end
+          else begin
+            send_esc <= 0;
+          end
         end
       end
       // When TX is ready, lower first send_esc
@@ -82,7 +88,6 @@ module TX_Escape
     end // else: !if(!RST_NI)
   end // always_ff @ (posedge CLK_I)
 
-  assign TX_READY_O = TX_READY_I && !send_esc && !send_data;
   always_ff @(posedge CLK_I) begin
     if (!RST_NI) begin
       DATA_SEND_O <= '0;
