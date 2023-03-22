@@ -48,11 +48,11 @@ module UART_RX #(
   logic               baudtick;
   logic               wait_cycle;
 
-  logic               rx_edge_detected;
+  logic               keep_sampling;
 
 
   always_ff @(posedge CLK_I) begin : BAUD_GEN
-    if( !RST_NI || !rx_edge_detected) begin
+    if( !RST_NI || !keep_sampling) begin
       baudtick <= 0;
       wait_cycle <= 0;
       baud_count <= SAMPLE_INTERVAL/2 -1;
@@ -97,7 +97,7 @@ module UART_RX #(
   always_ff @(posedge CLK_I) begin : CAPTURE_FRAME
     if (!RST_NI) begin
       uart_frame <= '1;
-      rx_edge_detected <= 0;
+      keep_sampling <= 0;
       bit_count <= 9;
       RX_DONE_O <= 0;
       channel <= 0;
@@ -106,10 +106,10 @@ module UART_RX #(
     end
     else begin
       RX_DONE_O <= 0;
-      if(!rx_edge_detected) begin
+      if(!keep_sampling) begin
           // Falling edge detected.
           if (rx_prev & ~rx) begin
-            rx_edge_detected <= 1;
+            keep_sampling <= 1;
           end
       end
       else begin
@@ -120,20 +120,22 @@ module UART_RX #(
           end
           else begin
             bit_count <= 9;
-            rx_edge_detected <= 0;
             rx_finished <= 1;
           end
         end
       end
+
       if (rx_finished) begin
         // Is the received frame valid?
         rx_finished <= 0;
         if (!uart_frame[0] & uart_frame[9]) begin
           channel <= 0;
+          keep_sampling <= 0;
           DATA_O <= uart_frame[8:1];
           RX_DONE_O <= 1;
         end
         else begin
+          keep_sampling <= 1;
           channel <= 1;
         end
       end
@@ -147,7 +149,7 @@ module UART_RX #(
     end
     else begin
       if (channel) begin
-        RX1_O = RX0_I;
+        RX1_O = uart_frame[0];
       end
       else begin
         RX1_O = 0;
