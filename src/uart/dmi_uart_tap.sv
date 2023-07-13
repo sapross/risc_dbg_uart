@@ -276,6 +276,9 @@ module DMI_UART_TAP #(
   assign DATA_SEND_O = ser_byte_out;
 
 
+  logic tx_write;
+  assign WRITE_O = tx_write;
+
   always_ff @(posedge CLK_I) begin : SERIALIZE
     if (!RST_NI || ser_reset) begin
       ser_count <= 0;
@@ -332,8 +335,6 @@ module DMI_UART_TAP #(
   logic                 send_command;
   assign SEND_COMMAND_O = send_command;
 
-  logic tx_write;
-  assign WRITE_O = tx_write;
 
   always_ff @(posedge CLK_I) begin : READ_ARBITER
     if (!RST_NI) begin
