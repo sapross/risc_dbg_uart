@@ -140,9 +140,12 @@ module TB_UART_TAP_ASYNC (  /*AUTOARG*/);
     @(posedge clk);
     read_valid <= 0;
     for (int i = 0; i < 10; i++) begin
+      tx_ready <= 0;
+      @(posedge clk);
+      tx_ready <= 1;
       @(posedge clk);
     end
-
+    $display("[ %0t ] Test: Continuous read of valid addresses.", $time);
     tx_ready <= 0;
     rx_empty <= 0;
     cmd_rec  <= 1;
@@ -156,14 +159,13 @@ module TB_UART_TAP_ASYNC (  /*AUTOARG*/);
     read_valid <= 1;
     @(posedge clk);
 
-    for (int i = 0; i < 10; i++) begin
+    for (int i = 0; i < 32; i++) begin
+      tx_ready <= 0;
+      @(posedge clk);
+      tx_ready <= 1;
       @(posedge clk);
     end
-    tx_ready <= 0;
-    for (int i = 0; i < 10; i++) begin
-      @(posedge clk);
-    end
-    tx_ready <= 1;
+    
 
 
   endtask  // test_read

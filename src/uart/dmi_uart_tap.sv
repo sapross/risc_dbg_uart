@@ -169,35 +169,30 @@ module DMI_UART_TAP #(
   assign deser_byte_in = DATA_REC_I;
 
   // Outgoing signals
-  logic                        deser_busy;
-  bit   [$clog2(MAX_BITS)-1:0] deser_count;
-  logic                        deser_run;
-  logic                        deser_done;
+  logic deser_busy;
+  logic deser_run;
+  logic deser_done;
   assign WRITE_VALID_O = deser_done;
+  assign DATA_BYTE_I   = DATA_REC_I;
+  logic [MAX_BITS-1:0] deser_data_out;
+  assign WRITE_DATA_O = deser_data_out[WIDTH-1:0];
 
-  // Internal signals
-  logic [MAX_BITS-1:0] deser_reg;
-  assign WRITE_DATA_O = deser_reg;
 
-  always_ff @(posedge CLK_I) begin : DE_SERIALIZE
-    if (!RST_NI || deser_reset) begin
-      deser_count <= 0;
-      deser_done  <= 0;
-      deser_busy  <= 0;
-      deser_reg   <= '0;
-    end else begin
-      if (deser_count < deser_length) begin
-        deser_done <= 0;
-        if (deser_run) begin
-          deser_busy <= 1;
-          deser_reg[deser_count+:8] <= deser_byte_in;
-          deser_count <= deser_count + 8;
-        end
-      end else if (deser_busy) begin
-        deser_done <= 1;
-      end
-    end
-  end
+  RX_DESERIALIZER #(
+      .MAX_BITS(MAX_BITS)
+  ) rx_deser_i (
+      // Outputs
+      .BUSY_O     (deser_busy),
+      .DONE_O     (deser_done),
+      .DATA_O     (deser_data_out),
+      // Inputs
+      .CLK_I      (CLK_I),
+      .RST_I      (!RST_NI || deser_reset),
+      .LENGTH_I   (deser_length),
+      .DATA_BYTE_I(DATA_REC_I),
+      .RUN_I      (deser_run)
+  );
+
 
   //-----------------------------------------------------------------------
   // ---- Write Arbiter Process. -----
@@ -216,14 +211,14 @@ module DMI_UART_TAP #(
       current_write_command <= CMD_NOP;
       current_write_address <= '0;
 
-      deser_reset <= 0;
+      deser_reset <= 1;
       deser_run <= 0;
       deser_length <= get_write_length(ADDR_IDCODE);
 
       receive_enable <= 0;
     end else begin
       write_arbiter_ready <= 0;
-      deser_reset <= 0;
+      deser_reset <= 1;
       deser_run <= 0;
       receive_enable <= 0;
 
@@ -244,7 +239,8 @@ module DMI_UART_TAP #(
         end else if (current_write_command == CMD_WRITE) begin
           // When writing, progress deserializer for each
           // received byte which is not a command.
-          receive_enable <= !deser_done && !deser_reset;
+          deser_reset <= 0;
+          receive_enable <= !deser_done && !RX_EMPTY_I && !CMD_REC_I;
           deser_run <= !RX_EMPTY_I && !CMD_REC_I;
           // When done, transmit data over write interconnect
           // to target.
@@ -253,11 +249,9 @@ module DMI_UART_TAP #(
               deser_reset <= 1;
             end
           end
-        end else begin
-          receive_enable <= 1;
-        end
-      end
-    end
+        end  // if (current_write_command == CMD_WRITE)
+      end  // else: !if(write_arbiter_valid)
+    end  // else: !if(!RST_NI)
   end  // block: WRITE_ARBITER
 
   //---------------------------------------------------------------------
@@ -268,57 +262,31 @@ module DMI_UART_TAP #(
   logic                        ser_reset;
 
   // Outgoing signals
-  bit   [$clog2(MAX_BITS)-1:0] ser_count;
   logic                        ser_busy;
   logic                        ser_run;
   logic                        ser_done;
   logic [                 7:0] ser_byte_out;
   assign DATA_SEND_O = ser_byte_out;
+  logic [MAX_BITS-1:0] ser_data_in;
+  assign ser_data_in = {'0, READ_DATA_I};
 
+  TX_SERIALIZER #(
+      .MAX_BITS(MAX_BITS)
+  ) tx_ser_i (
+      // Outputs
+      .BUSY_O     (ser_busy),
+      .DONE_O     (ser_done),
+      .DATA_BYTE_O(ser_byte_out),
+      .WRITE_O    (WRITE_O),
+      // Inputs
+      .CLK_I      (CLK_I),
+      .RST_I      (!RST_NI || ser_reset),
+      .RUN_I      (ser_run),
+      .DATA_I     (ser_data_in),
+      .LENGTH_I   (ser_length),
+      .READY_I    (TX_READY_I)
+  );
 
-  logic tx_write;
-  assign WRITE_O = tx_write;
-
-  always_ff @(posedge CLK_I) begin : SERIALIZE
-    if (!RST_NI || ser_reset) begin
-      ser_count <= 0;
-      ser_busy <= 0;
-      ser_done <= 0;
-
-      ser_byte_out <= '0;
-      tx_write <= 0;
-    end else begin
-      tx_write <= 0;
-      for (int j = 0; j < 8; j++) begin
-        ser_byte_out[j] <= ser_count + j < ser_length ? READ_DATA_I[ser_count+j] : 1'b0;
-      end
-      // Start serializing if run signal is set.
-      // Only possible once after reset.
-      if (ser_run && !ser_done) begin
-        ser_busy <= 1;
-      end
-      if (ser_busy) begin
-        // While busy write current word to tx.
-        if (ser_count < ser_length) begin
-          if (TX_READY_I) begin
-            tx_write <= 1;
-          end
-          if (tx_write) begin
-            // If we have started writing and
-            // TX becomes busy, we proceed in
-            // the serialization.
-            if (!TX_READY_I) begin
-              tx_write  <= 0;
-              ser_count <= ser_count + 8;
-            end
-          end
-        end else begin
-          ser_done <= 1;
-          ser_busy <= 0;
-        end
-      end
-    end
-  end
 
   //-----------------------------------------------------------------------
   // ---- Read-Arbiter Process. -----
@@ -422,3 +390,6 @@ module DMI_UART_TAP #(
 
 
 endmodule : DMI_UART_TAP
+// Local Variables:
+// verilog-library-flags:("-f ../../include.vc")
+// End:
