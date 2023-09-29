@@ -109,6 +109,10 @@ module RX_Escape
             state_next = st_idle;
           end
         end
+        default: begin
+            state_next = st_idle;
+        end
+        
       endcase // case (state)
     end
   end

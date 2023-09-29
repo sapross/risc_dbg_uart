@@ -381,7 +381,7 @@ module DMI_UART_TAP #(
         // exactly once.
         if (!ser_done) begin
           READ_READY_O <= !ser_busy;
-          ser_run <= 1;
+          ser_run <= READ_VALID_I;
         end else begin
           ser_reset <= 1;
           current_read_command <= CMD_NOP;
@@ -391,7 +391,7 @@ module DMI_UART_TAP #(
         // to CMD_NOP after one read.
         if (!ser_done) begin
           READ_READY_O <= !ser_busy;
-          ser_run <= 1;
+          ser_run <= READ_VALID_I;
         end else begin
           ser_reset <= 1;
         end

@@ -16,7 +16,7 @@ package uart_pkg;
   localparam integer      CMDLENGTH = 8 - IRLENGTH;
 
   localparam logic [7:0]  HEADER = 8'h01; // SOF in ASCII
-  localparam logic [7:0]  ESC = 8'b10100000;
+  localparam logic [7:0]  ESC = 8'hA0;
 
   typedef enum            logic [CMDLENGTH-1:0] {
                                                  CMD_NOP       = 3'b000,

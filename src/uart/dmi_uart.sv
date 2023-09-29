@@ -12,36 +12,36 @@ import uart_pkg::*;
 import dm::*;
 
 
-module DMI_UART (/*AUTOARG*/
+module DMI_UART (  /*AUTOARG*/
 
-                 input logic                         CLK_I,
-                 input logic                         RST_NI,
+    input logic CLK_I,
+    input logic RST_NI,
 
-                 // TAP Signals
-                 input logic                         TAP_READ_READY_I,
-                 output logic [$bits(dmi_req_t)-1:0] TAP_READ_DATA_O,
-                 output logic                        TAP_READ_VALID_O,
+    // TAP Signals
+    input  logic                        TAP_READ_READY_I,
+    output logic [$bits(dmi_req_t)-1:0] TAP_READ_DATA_O,
+    output logic                        TAP_READ_VALID_O,
 
-                 output logic                        TAP_WRITE_READY_O,
-                 input logic                         TAP_WRITE_VALID_I,
-                 input logic [$bits(dmi_req_t)-1:0]  TAP_WRITE_DATA_I,
+    output logic                        TAP_WRITE_READY_O,
+    input  logic                        TAP_WRITE_VALID_I,
+    input  logic [$bits(dmi_req_t)-1:0] TAP_WRITE_DATA_I,
 
-                 // Ready/Valid Bus for DM
-                 output logic                        DMI_RESP_READY_O,
-                 input logic                         DMI_RESP_VALID_I,
-                 input [$bits(dmi_resp_t)-1:0]       DMI_RESP_I,
+    // Ready/Valid Bus for DM
+    output logic                         DMI_RESP_READY_O,
+    input  logic                         DMI_RESP_VALID_I,
+    input        [$bits(dmi_resp_t)-1:0] DMI_RESP_I,
 
-                 input logic                         DMI_REQ_READY_I,
-                 output logic                        DMI_REQ_VALID_O,
-                 output [$bits(dmi_req_t)-1:0]       DMI_REQ_O
-                 ) ;
+    input  logic                        DMI_REQ_READY_I,
+    output logic                        DMI_REQ_VALID_O,
+    output       [$bits(dmi_req_t)-1:0] DMI_REQ_O
+);
 
   // DMI_JTAG (alongside OpenOCD) define a different dmi_req datatype.
   // Requires conversion to the data-type defined in dm_pkg.
-  typedef struct                                     packed {
-    logic [6:0]                                      addr;
-    logic [31:0]                                     data;
-    logic [1:0]                                      op;
+  typedef struct packed {
+    logic [6:0]  addr;
+    logic [31:0] data;
+    logic [1:0]  op;
   } dmi_t;
   dmi_t tap_dmi_req;
   assign tap_dmi_req = dmi_t'(TAP_WRITE_DATA_I);
@@ -58,10 +58,10 @@ module DMI_UART (/*AUTOARG*/
 
 
   // DMI-JTAG uses a different format to answer the TAP.
-  typedef struct                                     packed {
-    logic [6:0]                                      addr;
-    logic [31:0]                                     data;
-    dmi_error_e dmi_error;
+  typedef struct packed {
+    logic [6:0]  addr;
+    logic [31:0] data;
+    dmi_error_e  dmi_error;
   } tap_resp_t;
 
   // DMI output to the tap consists of the following data.
@@ -71,34 +71,32 @@ module DMI_UART (/*AUTOARG*/
   tap_resp_t tap_dmi_resp;
 
   dmi_resp_t dmi_resp;
-  assign tap_dmi_resp.addr = '0; //tap_dmi_req.addr;
+  assign tap_dmi_resp.addr = '0;  //tap_dmi_req.addr;
   assign tap_dmi_resp.data = dmi_resp.data;
   assign tap_dmi_resp.dmi_error = DMINoError;
 
   assign TAP_READ_DATA_O = tap_dmi_resp;
 
-  logic                                              do_request;
-  logic                                              do_read;
-  logic                                              do_end;
+  logic do_request;
+  logic do_read;
+  logic do_end;
 
-  //assign dmi_resp = DMI_RESP_I;
 
   always_ff @(posedge CLK_I) begin : DMI_WRITE
-    if(!RST_NI) begin
+    if (!RST_NI) begin
       TAP_WRITE_READY_O <= 0;
       dmi_resp <= '0;
-      request <=  '0;
+      request <= '0;
       DMI_REQ_VALID_O <= 0;
       DMI_RESP_READY_O <= 0;
       do_read <= 0;
       do_request <= 0;
       do_end <= 0;
 
-    end
-    else begin
+    end else begin
       TAP_WRITE_READY_O <= 0;
-      DMI_REQ_VALID_O <= 0;
-      DMI_RESP_READY_O <= 0;
+      DMI_REQ_VALID_O   <= 0;
+      DMI_RESP_READY_O  <= 0;
 
       if (do_request) begin
         DMI_REQ_VALID_O <= 1;
@@ -106,20 +104,16 @@ module DMI_UART (/*AUTOARG*/
           do_request <= 0;
           do_end <= 1;
         end
-      end
-
-      else if (do_end) begin
+      end else if (do_end) begin
         DMI_RESP_READY_O <= 1;
         if (DMI_RESP_READY_O) begin
           do_end <= 0;
-          if(do_read) begin
-            do_read <= 0;
+          if (do_read && DMI_RESP_VALID_I) begin
+            do_read  <= 0;
             dmi_resp <= DMI_RESP_I;
           end
         end
-      end
-
-      else begin
+      end else begin
         if (TAP_WRITE_VALID_I) begin
           TAP_WRITE_READY_O <= 1;
 
@@ -127,8 +121,7 @@ module DMI_UART (/*AUTOARG*/
             do_request <= 1;
             do_read <= 1;
             request <= tap_dmi_req;
-          end
-          else if (tap_dmi_req.op == DTM_WRITE) begin
+          end else if (tap_dmi_req.op == DTM_WRITE) begin
             do_request <= 1;
             request <= tap_dmi_req;
           end
@@ -141,10 +134,9 @@ module DMI_UART (/*AUTOARG*/
   // after successful DM interaction, read requests are simply
   // answered by setting valid to high.
   always_ff @(posedge CLK_I) begin : TAP_READ
-    if(!RST_NI) begin
+    if (!RST_NI) begin
       TAP_READ_VALID_O <= 0;
-    end
-    else begin
+    end else begin
       TAP_READ_VALID_O <= 0;
       // Do not answer read requests by tap if there is an outstanding
       // dmi operation.
@@ -156,4 +148,4 @@ module DMI_UART (/*AUTOARG*/
     end
   end
 
-endmodule // DMI_UART
+endmodule  // DMI_UART
