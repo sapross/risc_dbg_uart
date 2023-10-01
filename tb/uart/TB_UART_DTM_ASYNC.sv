@@ -239,6 +239,8 @@ module TB_UART_DTM_ASYNC (/*AUTOARG*/ ) ;
     reset_to_default();
     @(posedge clk);
     reset_n <= 1;
+    send_data({ESC});
+    send_data({CMD_READ,ADDR_IDCODE});
 
    send_data({ESC});
    send_data({CMD_WRITE,ADDR_DMI});

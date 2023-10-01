@@ -52,9 +52,6 @@ module DMI_UART_TAP #(
   // ---- Command Decoder ----
   //-----------------------------------------------------------------------
   // Signals for easier address and command access.
-  logic [ IRLENGTH-1:0] address;
-  logic [CMDLENGTH-1:0] command;
-
   logic                 busy_decoding;
 
   logic [CMDLENGTH-1:0] write_command;
@@ -79,80 +76,25 @@ module DMI_UART_TAP #(
   // is running or, rx is a command and decoder is ready to decode.
   assign rx_read = !RX_EMPTY_I && ((!busy_decoding && CMD_REC_I) || receive_enable);
 
-  always_ff @(posedge CLK_I) begin : DECODER
-    if (!RST_NI) begin
-      busy_decoding <= 0;
-      address <= '0;
-      command <= CMD_NOP;
+  COMMAND_DECODER command_decoder_i (
+      // Outputs
+      .BUSY_O               (busy_decoding),
+      .WRITE_COMMAND_O      (write_command),
+      .WRITE_ADDRESS_O      (write_address),
+      .READ_COMMAND_O       (read_command),
+      .READ_ADDRESS_O       (read_address),
+      .READ_ARBITER_VALID_O (read_arbiter_valid),
+      .WRITE_ARBITER_VALID_O(write_arbiter_valid),
+      // Inputs
+      .CLK_I                (CLK_I),
+      .RST_NI               (RST_NI),
+      .READ_I               (rx_read),
+      .CMD_REC_I            (CMD_REC_I),
+      .DATA_REC_I           (DATA_REC_I),
+      .READ_ARBITER_READY_I (read_arbiter_ready),
+      .WRITE_ARBITER_READY_I(write_arbiter_ready)
+  );
 
-      read_arbiter_valid <= 0;
-      read_address <= '0;
-      read_command <= CMD_NOP;
-
-      write_arbiter_valid <= 0;
-      write_address <= '0;
-      write_command <= CMD_NOP;
-
-    end else begin
-
-      read_arbiter_valid  <= 0;
-      write_arbiter_valid <= 0;
-      // Process read data and decode command & address.
-      if (rx_read && CMD_REC_I) begin
-        busy_decoding <= 1;
-        address <= DATA_REC_I[IRLENGTH-1:0];
-        command <= DATA_REC_I[7:IRLENGTH];
-      end
-      if (busy_decoding) begin
-        case (command)
-          // Reset is communicated with the Arbiters.
-          CMD_RESET: begin
-            write_arbiter_valid <= 1;
-            write_command <= CMD_RESET;
-            write_address <= ADDR_IDCODE;
-
-            read_arbiter_valid <= 1;
-            read_command <= CMD_RESET;
-            read_address <= address;
-            if (read_arbiter_ready && write_arbiter_ready) begin
-              busy_decoding <= 0;
-            end
-          end
-
-          // Read commands do not change write_command and progress.
-          CMD_READ: begin
-            read_arbiter_valid <= 1;
-            read_command <= CMD_READ;
-            read_address <= address;
-            if (read_arbiter_ready) begin
-              busy_decoding <= 0;
-            end
-          end
-          CMD_CONT_READ: begin
-            read_arbiter_valid <= 1;
-            read_command <= CMD_CONT_READ;
-            read_address <= address;
-            if (read_arbiter_ready) begin
-              busy_decoding <= 0;
-            end
-          end
-
-          // Only CMD_WRITE changes write variables.
-          CMD_WRITE: begin
-            write_arbiter_valid <= 1;
-            write_command <= CMD_WRITE;
-            write_address <= address;
-            if (write_arbiter_ready) begin
-              busy_decoding <= 0;
-            end
-          end
-          default: begin
-            busy_decoding <= 0;
-          end
-        endcase  // case ( command )
-      end  // if (rx_read && CMD_REC_I)
-    end  // else: !if(!RST_NI)
-  end  // block: CMD_DECODE
 
   //-----------------------------------------------------------------------
   // ---- Deserialization process. -----
@@ -165,17 +107,14 @@ module DMI_UART_TAP #(
   // Ingoing signals
   logic                        deser_reset;
   bit   [$clog2(MAX_BITS)-1:0] deser_length;
-  logic [                 7:0] deser_byte_in;
-  assign deser_byte_in = DATA_REC_I;
 
   // Outgoing signals
-  logic deser_busy;
-  logic deser_run;
-  logic deser_done;
+  logic                        deser_busy;
+  logic                        deser_run;
+  logic                        deser_done;
   assign WRITE_VALID_O = deser_done;
-  assign DATA_BYTE_I   = DATA_REC_I;
   logic [MAX_BITS-1:0] deser_data_out;
-  assign WRITE_DATA_O = deser_data_out[WIDTH-1:0];
+
 
 
   RX_DESERIALIZER #(
@@ -202,6 +141,9 @@ module DMI_UART_TAP #(
   // transmitted over write interconnect.
   logic [CMDLENGTH-1:0] current_write_command;
   logic [ IRLENGTH-1:0] current_write_address;
+  logic [ MAX_BITS-1:0] write_data;
+  assign WRITE_DATA_O = write_data[WIDTH-1:0];
+
   assign WRITE_ADDRESS_O = current_write_address;
 
   always_ff @(posedge CLK_I) begin : WRITE_ARBITER
@@ -210,6 +152,7 @@ module DMI_UART_TAP #(
       write_arbiter_ready <= 0;
       current_write_command <= CMD_NOP;
       current_write_address <= '0;
+      write_data <= '0;
 
       deser_reset <= 1;
       deser_run <= 0;
@@ -228,6 +171,7 @@ module DMI_UART_TAP #(
         // deserialization length.
         deser_reset <= 1;
         write_arbiter_ready <= 1;
+        write_data <= '0;
         current_write_command <= write_command;
         current_write_address <= write_address;
         deser_length <= get_write_length(write_address);
@@ -236,15 +180,18 @@ module DMI_UART_TAP #(
         if (current_write_command == CMD_RESET) begin
           deser_reset <= 1;
           current_write_command <= CMD_NOP;
+          write_data <= '0;
+
         end else if (current_write_command == CMD_WRITE) begin
           // When writing, progress deserializer for each
           // received byte which is not a command.
           deser_reset <= 0;
-          receive_enable <= !deser_done && !RX_EMPTY_I && !CMD_REC_I;
+          receive_enable <= !deser_done;
           deser_run <= !RX_EMPTY_I && !CMD_REC_I;
           // When done, transmit data over write interconnect
           // to target.
           if (deser_done) begin
+            write_data <= deser_data_out;
             if (WRITE_READY_I) begin
               deser_reset <= 1;
             end
@@ -268,7 +215,9 @@ module DMI_UART_TAP #(
   logic [                 7:0] ser_byte_out;
   assign DATA_SEND_O = ser_byte_out;
   logic [MAX_BITS-1:0] ser_data_in;
-  assign ser_data_in = {'0, READ_DATA_I};
+  logic [MAX_BITS-1:0] read_data;
+
+  assign ser_data_in = {'0, read_data};
 
   TX_SERIALIZER #(
       .MAX_BITS(MAX_BITS)
@@ -313,6 +262,7 @@ module DMI_UART_TAP #(
 
       COMMAND_O <= '0;
       send_command <= 0;
+      read_data <= '0;
 
       ser_run <= 0;
       ser_reset <= 1;
@@ -343,11 +293,16 @@ module DMI_UART_TAP #(
 
       if (current_read_command == CMD_RESET) begin
         ser_reset <= 1;
+        read_data <= '0;
         current_read_command <= CMD_NOP;
       end else if (current_read_command == CMD_READ) begin
         // Read command will trigger read of address
         // exactly once.
         if (!ser_done) begin
+          if (!ser_busy && READ_VALID_I) begin
+            read_data <= READ_DATA_I;
+          end
+
           READ_READY_O <= !ser_busy;
           ser_run <= READ_VALID_I;
         end else begin
@@ -358,6 +313,9 @@ module DMI_UART_TAP #(
         // Same as CMD_READ, but will not change command
         // to CMD_NOP after one read.
         if (!ser_done) begin
+          if (!ser_busy && READ_VALID_I) begin
+            read_data <= READ_DATA_I;
+          end
           READ_READY_O <= !ser_busy;
           ser_run <= READ_VALID_I;
         end else begin
