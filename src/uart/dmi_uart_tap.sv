@@ -214,10 +214,7 @@ module DMI_UART_TAP #(
   logic                        ser_done;
   logic [                 7:0] ser_byte_out;
   assign DATA_SEND_O = ser_byte_out;
-  logic [MAX_BITS-1:0] ser_data_in;
-  logic [MAX_BITS-1:0] read_data;
 
-  assign ser_data_in = {'0, read_data};
 
   TX_SERIALIZER #(
       .MAX_BITS(MAX_BITS)
@@ -231,7 +228,7 @@ module DMI_UART_TAP #(
       .CLK_I      (CLK_I),
       .RST_I      (!RST_NI || ser_reset),
       .RUN_I      (ser_run),
-      .DATA_I     (ser_data_in),
+      .DATA_I     ({'0, READ_DATA_I}),
       .LENGTH_I   (ser_length),
       .READY_I    (TX_READY_I)
   );
@@ -262,7 +259,6 @@ module DMI_UART_TAP #(
 
       COMMAND_O <= '0;
       send_command <= 0;
-      read_data <= '0;
 
       ser_run <= 0;
       ser_reset <= 1;
@@ -293,15 +289,11 @@ module DMI_UART_TAP #(
 
       if (current_read_command == CMD_RESET) begin
         ser_reset <= 1;
-        read_data <= '0;
         current_read_command <= CMD_NOP;
       end else if (current_read_command == CMD_READ) begin
         // Read command will trigger read of address
         // exactly once.
         if (!ser_done) begin
-          if (!ser_busy && READ_VALID_I) begin
-            read_data <= READ_DATA_I;
-          end
 
           READ_READY_O <= !ser_busy;
           ser_run <= READ_VALID_I;
@@ -313,9 +305,6 @@ module DMI_UART_TAP #(
         // Same as CMD_READ, but will not change command
         // to CMD_NOP after one read.
         if (!ser_done) begin
-          if (!ser_busy && READ_VALID_I) begin
-            read_data <= READ_DATA_I;
-          end
           READ_READY_O <= !ser_busy;
           ser_run <= READ_VALID_I;
         end else begin
