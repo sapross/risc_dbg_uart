@@ -82,13 +82,13 @@ module COMMAND_DECODER (  /*AUTOARG*/
   end
 
 
-  assign BUSY_O = state == !st_idle ? 1 : 0;
 
   always_comb begin : DECODER
     if (!RST_NI) begin
       state_next = st_idle;
       addr_next = '0;
       cmd_next = CMD_NOP;
+      BUSY_O = 0;
 
       READ_ARBITER_VALID_O = 0;
       READ_ADDRESS_O = '0;
@@ -105,6 +105,8 @@ module COMMAND_DECODER (  /*AUTOARG*/
       WRITE_ARBITER_VALID_O = 0;
       WRITE_ADDRESS_O = '0;
       WRITE_COMMAND_O = CMD_NOP;
+
+      BUSY_O = 0;
       case (state)
         st_idle: begin
           // Process read data and decode cmd & raddr.
@@ -115,6 +117,7 @@ module COMMAND_DECODER (  /*AUTOARG*/
           end
         end
         st_handover: begin
+          BUSY_O = 1;
           case (cmd)
             // Reset is communicated with the Arbiters.
             CMD_RESET: begin
